@@ -1,0 +1,66 @@
+<Window x:Class="Pinboard.App.SearchWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource WindowSearchTitle}"
+        Width="820" Height="600"
+        MinWidth="680" MinHeight="480"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="26,24,26,20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel>
+      <TextBlock Text="{DynamicResource SearchHeading}" Style="{StaticResource WindowTitleText}" />
+      <TextBlock Text="{DynamicResource SearchDescription}"
+                 Style="{StaticResource SecondaryText}" Margin="0,3,0,0" />
+    </StackPanel>
+
+    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,18,0,14" Padding="8">
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}"
+                Click="SearchButton_Click" IsDefault="True" MinWidth="78"
+                Content="{DynamicResource CommonSearch}" />
+        <TextBlock DockPanel.Dock="Left" Text="⌕" FontSize="21" Foreground="{StaticResource TertiaryLabelBrush}"
+                   VerticalAlignment="Center" Margin="6,0,8,0" />
+        <TextBox x:Name="QueryBox" BorderThickness="0" Background="Transparent"
+                 FontSize="15" Padding="2,0" />
+      </DockPanel>
+    </Border>
+
+    <ListBox x:Name="ResultsList" Grid.Row="2" MouseDoubleClick="ResultsList_MouseDoubleClick">
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="4" />
+              <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" Background="{StaticResource AccentBrush}" CornerRadius="2" />
+            <StackPanel Grid.Column="1" Margin="12,0,0,0">
+              <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
+              <TextBlock Text="{Binding Snippet}" TextWrapping="Wrap" Margin="0,4,0,0"
+                         Foreground="{StaticResource SecondaryLabelBrush}" LineHeight="19" />
+            </StackPanel>
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <Border Grid.Row="3" HorizontalAlignment="Left" Margin="0,10,0,0">
+      <Border.Style>
+        <Style TargetType="Border" BasedOn="{StaticResource Pill}">
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding Text, ElementName=SearchStatus}" Value="">
+              <Setter Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </Border.Style>
+      <TextBlock x:Name="SearchStatus" Style="{StaticResource SecondaryText}" />
+    </Border>
+  </Grid>
+</Window>

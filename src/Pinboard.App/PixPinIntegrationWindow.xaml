@@ -1,0 +1,74 @@
+<Window x:Class="Pinboard.App.PixPinIntegrationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource WindowPixPinTitle}"
+        Width="820" Height="680"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+  <Grid Margin="26,24,26,22">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Orientation="Horizontal">
+      <Border Width="43" Height="43" CornerRadius="13" Background="{StaticResource AccentSoftBrush}">
+        <TextBlock Text="⌗" Foreground="{StaticResource AccentBrush}" FontSize="21"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <StackPanel Margin="13,0,0,0" VerticalAlignment="Center">
+        <TextBlock Text="PixPin → Pinboard" Style="{StaticResource WindowTitleText}" />
+        <TextBlock Text="{DynamicResource PixPinDescription}"
+                   Style="{StaticResource SecondaryText}" />
+      </StackPanel>
+    </StackPanel>
+
+    <Border Grid.Row="1" Style="{StaticResource InsetCard}" Margin="0,18,0,14">
+      <TextBlock TextWrapping="Wrap" LineHeight="20" Foreground="{StaticResource SecondaryLabelBrush}"
+                 Text="{DynamicResource PixPinInstructions}" />
+    </Border>
+
+    <Border Grid.Row="2" Background="#1D1D1F" BorderBrush="#343438" BorderThickness="1"
+            CornerRadius="14" Padding="2">
+      <TextBox x:Name="ScriptBox"
+               Height="Auto"
+               IsReadOnly="True"
+               AcceptsReturn="True"
+               FontFamily="Cascadia Mono, Consolas"
+               FontSize="13"
+               Foreground="#F5F5F7"
+               Background="#1D1D1F"
+               BorderThickness="0"
+               TextWrapping="Wrap"
+               VerticalContentAlignment="Top"
+               Padding="15"
+               VerticalScrollBarVisibility="Auto" />
+    </Border>
+
+    <Border Grid.Row="3" Style="{StaticResource Pill}" HorizontalAlignment="Left" Margin="0,12,0,0">
+      <StackPanel Orientation="Horizontal">
+        <Ellipse Width="7" Height="7" Fill="{StaticResource AccentBrush}" Margin="0,0,7,0"
+                 VerticalAlignment="Center" />
+        <TextBlock x:Name="IntegrationStatus" TextWrapping="Wrap" MaxWidth="690"
+                   Style="{StaticResource SecondaryText}" />
+      </StackPanel>
+    </Border>
+
+    <WrapPanel Grid.Row="4" Margin="0,16,0,0">
+        <Button Click="CheckButton_Click" Content="{DynamicResource PixPinCheck}" />
+        <Button Click="ChoosePixPinButton_Click" Content="{DynamicResource PixPinChooseExecutable}" />
+        <Button Click="OpenPixPinButton_Click" Content="{DynamicResource PixPinOpenSettings}" />
+        <Button Click="BackupButton_Click" Content="{DynamicResource PixPinBackup}" />
+        <Button Click="RestoreButton_Click" Content="{DynamicResource PixPinRestore}" />
+    </WrapPanel>
+      <StackPanel Grid.Row="5" Margin="0,10,0,0" Orientation="Horizontal" HorizontalAlignment="Right">
+        <Button IsCancel="True" Content="{DynamicResource CommonClose}" />
+        <Button Style="{StaticResource PrimaryButton}" Click="CopyButton_Click"
+                Margin="7,0,3,0" Content="{DynamicResource PixPinCopyScript}" />
+      </StackPanel>
+  </Grid>
+</Window>

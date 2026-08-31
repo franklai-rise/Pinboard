@@ -1,0 +1,236 @@
+:root {
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  color: #1d1d1f;
+  background: #f5f5f7;
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: geometricPrecision;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root,
+.canvas-shell {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  background: #f5f5f7;
+}
+
+.canvas-shell {
+  position: relative;
+  background:
+    radial-gradient(circle at 50% -20%, rgba(0, 122, 255, 0.045), transparent 38%),
+    #f5f5f7;
+}
+
+.loading {
+  position: absolute;
+  z-index: 100;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(245, 245, 247, 0.82);
+  backdrop-filter: blur(18px) saturate(1.25);
+}
+
+.loading-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 238px;
+  padding: 17px 20px;
+  color: #1d1d1f;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.12);
+}
+
+.loading-spinner {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(0, 122, 255, 0.18);
+  border-top-color: #007aff;
+  border-radius: 50%;
+  animation: pinboard-spin 0.8s linear infinite;
+}
+
+.loading-copy {
+  display: grid;
+  gap: 3px;
+}
+
+.loading-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.loading-copy small {
+  color: #6e6e73;
+  font-size: 11px;
+}
+
+.save-status {
+  position: absolute;
+  z-index: 90;
+  right: 14px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 10px;
+  color: #4a4a4f;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 11px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(18px) saturate(1.3);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.save-status__dot {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  background: #8e8e93;
+  border-radius: 50%;
+}
+
+.save-status--saving .save-status__dot {
+  background: #007aff;
+  animation: pinboard-pulse 1.2s ease-in-out infinite;
+}
+
+.save-status--failed .save-status__dot,
+.save-status--conflict .save-status__dot {
+  background: #ff3b30;
+}
+
+.save-status button {
+  padding: 3px 7px;
+  color: #006ee6;
+  background: #e8f2ff;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.save-status button:hover {
+  background: #dcecff;
+}
+
+@keyframes pinboard-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pinboard-pulse {
+  0%, 100% { opacity: 0.42; transform: scale(0.86); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+/* Excalidraw remains functionally stock; these rules only refine its visual surface. */
+.excalidraw {
+  --color-primary: #007aff;
+  --color-primary-darker: #006ee6;
+  --color-primary-darkest: #005fc7;
+  --color-primary-light: #e8f2ff;
+  --color-primary-light-darker: #dcecff;
+  --color-primary-hover: #006ee6;
+  --color-selection: #007aff;
+  --color-on-primary-container: #004f9f;
+  --color-surface-primary-container: #e8f2ff;
+  --button-selected-bg: #e8f2ff;
+  --button-selected-border: #e8f2ff;
+  --button-selected-hover-bg: #dcecff;
+  --color-surface-high: rgba(255, 255, 255, 0.94);
+  --default-bg-color: #f5f5f7;
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif !important;
+}
+
+.excalidraw .App-menu_top {
+  top: 10px;
+}
+
+.excalidraw .Island {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  border-radius: 14px !important;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.11) !important;
+  backdrop-filter: blur(20px) saturate(1.35);
+}
+
+.excalidraw .App-toolbar-container .Island,
+.excalidraw .App-menu_top .Island {
+  padding: 3px !important;
+}
+
+.excalidraw .ToolIcon__icon,
+.excalidraw .ToolIcon__keybinding,
+.excalidraw button,
+.excalidraw .buttonList label {
+  border-radius: 9px !important;
+}
+
+.excalidraw .ToolIcon_type_radio:checked + .ToolIcon__icon,
+.excalidraw .ToolIcon_type_checkbox:checked + .ToolIcon__icon {
+  color: #006ee6 !important;
+  background: #e8f2ff !important;
+}
+
+.excalidraw .ToolIcon__icon:hover,
+.excalidraw button:hover {
+  background-color: #f2f2f7 !important;
+}
+
+.excalidraw .ToolIcon_type_radio:checked + .ToolIcon__icon:hover,
+.excalidraw .ToolIcon_type_checkbox:checked + .ToolIcon__icon:hover {
+  background: #dcecff !important;
+}
+
+.excalidraw .zoom-actions,
+.excalidraw .undo-redo-buttons,
+.excalidraw .layer-ui__wrapper__footer-right > * {
+  border-radius: 12px !important;
+}
+
+.excalidraw .sidebar,
+.excalidraw .library-menu,
+.excalidraw .Modal__content {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16) !important;
+}
+
+.excalidraw input,
+.excalidraw select,
+.excalidraw textarea {
+  border-radius: 9px !important;
+}
+
+.excalidraw .popover {
+  border-radius: 14px !important;
+  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.14) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-spinner {
+    animation-duration: 1.6s;
+  }
+
+  .save-status--saving .save-status__dot {
+    animation: none;
+  }
+}

@@ -1,0 +1,77 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-and-package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Check public tree for personal data
+        shell: pwsh
+        run: ./scripts/check-public-privacy.ps1
+
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Test web canvas
+        working-directory: web
+        run: npm test
+
+      - name: Audit web dependencies
+        working-directory: web
+        run: npm audit --audit-level=low
+
+      - name: Build web canvas
+        working-directory: web
+        run: npm run build
+
+      - name: Restore .NET dependencies with audit enforcement
+        shell: pwsh
+        run: dotnet restore PinboardApp.sln -p:NuGetAudit=true -p:WarningsAsErrors=NU1901%3BNU1902%3BNU1903%3BNU1904
+
+      - name: Test .NET application
+        run: dotnet test PinboardApp.sln -c Release --no-restore
+
+      - name: Publish portable Windows build
+        run: dotnet publish src/Pinboard.App/Pinboard.App.csproj -c Release -r win-x64 --self-contained true --no-restore -o artifacts/publish
+
+      - name: Stage portable package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path artifacts/portable -Force | Out-Null
+          Copy-Item artifacts/publish/Pinboard.exe artifacts/portable/Pinboard.exe
+          Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.txt artifacts/portable/
+          Copy-Item docs/*.md artifacts/portable/
+
+      - name: Upload portable package
+        uses: actions/upload-artifact@v7
+        with:
+          name: Pinboard-windows-x64
+          path: artifacts/portable
+          if-no-files-found: error

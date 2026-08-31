@@ -1,0 +1,137 @@
+<Window x:Class="Pinboard.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="{DynamicResource WindowSettingsTitle}"
+        Width="720" Height="750"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="NoResize">
+  <Grid Margin="26,24,26,22">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <StackPanel Orientation="Horizontal">
+      <Border Width="43" Height="43" CornerRadius="13" Background="{StaticResource AccentSoftBrush}">
+        <TextBlock Text="⚙" Foreground="{StaticResource AccentBrush}" FontSize="20"
+                   HorizontalAlignment="Center" VerticalAlignment="Center" />
+      </Border>
+      <StackPanel Margin="13,0,0,0" VerticalAlignment="Center">
+        <TextBlock Text="{DynamicResource SettingsHeading}" Style="{StaticResource WindowTitleText}" />
+        <TextBlock Text="{DynamicResource SettingsDescription}" Style="{StaticResource SecondaryText}" />
+      </StackPanel>
+    </StackPanel>
+
+    <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,20,0,18" Padding="22,18">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+      <Grid Margin="0,0,9,0">
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="31" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="31" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="31" />
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="31" />
+          <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0">
+          <TextBlock Text="{DynamicResource SettingsLibraryLabel}" Style="{StaticResource SectionTitleText}" />
+          <DockPanel Margin="0,9,0,0">
+            <Button DockPanel.Dock="Right" Click="BrowseLibraryButton_Click" Margin="9,0,0,0"
+                    Content="{DynamicResource SettingsBrowse}" />
+            <TextBox x:Name="LibraryBox" />
+          </DockPanel>
+          <TextBlock Margin="0,6,0,0" Text="{DynamicResource SettingsLibraryHelp}"
+                     Style="{StaticResource SecondaryText}" />
+        </StackPanel>
+
+        <Border Grid.Row="1" Height="1" VerticalAlignment="Center"
+                Background="{StaticResource SoftSeparatorBrush}" />
+
+        <StackPanel Grid.Row="2">
+          <DockPanel>
+            <TextBlock x:Name="QualityText" DockPanel.Dock="Right" Foreground="{StaticResource AccentBrush}"
+                       FontWeight="SemiBold" VerticalAlignment="Center" />
+            <TextBlock Text="{DynamicResource SettingsQualityLabel}" Style="{StaticResource SectionTitleText}" />
+          </DockPanel>
+          <Slider x:Name="QualitySlider" Margin="0,7,0,0" Minimum="40" Maximum="100"
+                  TickFrequency="5" IsSnapToTickEnabled="True"
+                  ValueChanged="QualitySlider_ValueChanged" />
+          <TextBlock Text="{DynamicResource SettingsQualityHelp}"
+                     Style="{StaticResource SecondaryText}" />
+        </StackPanel>
+
+        <Border Grid.Row="3" Height="1" VerticalAlignment="Center"
+                Background="{StaticResource SoftSeparatorBrush}" />
+
+        <StackPanel Grid.Row="4">
+          <TextBlock Text="{DynamicResource SettingsOcrLabel}" Style="{StaticResource SectionTitleText}" />
+          <WrapPanel Margin="0,10,0,0">
+            <CheckBox x:Name="ChineseOcrBox" Content="{DynamicResource SettingsChinese}" Margin="0,0,26,0" />
+            <CheckBox x:Name="EnglishOcrBox" Content="{DynamicResource SettingsEnglish}" />
+          </WrapPanel>
+          <TextBlock Margin="0,7,0,0" Text="{DynamicResource SettingsOcrHelp}"
+                     Style="{StaticResource SecondaryText}" />
+        </StackPanel>
+
+        <Border Grid.Row="5" Height="1" VerticalAlignment="Center"
+                Background="{StaticResource SoftSeparatorBrush}" />
+
+        <StackPanel Grid.Row="6">
+          <TextBlock Text="{DynamicResource SettingsCaptureLabel}" Style="{StaticResource SectionTitleText}" />
+          <CheckBox x:Name="PauseCaptureBox" Margin="0,10,0,0" Content="{DynamicResource SettingsPauseCapture}" />
+          <CheckBox x:Name="FixedTargetBox" Margin="0,10,0,0"
+                    Content="{DynamicResource SettingsFixedTarget}" />
+          <CheckBox x:Name="TextCaptureBox" Margin="0,10,0,0"
+                    Content="{DynamicResource SettingsTextCapture}" />
+          <CheckBox x:Name="PauseTextCaptureBox" Margin="0,10,0,0"
+                    Content="{DynamicResource SettingsPauseTextCapture}" />
+          <CheckBox x:Name="TextPrivacyModeBox" Margin="0,10,0,0"
+                    Content="{DynamicResource SettingsTextPrivacyMode}" />
+          <TextBlock Margin="0,5,0,0" Text="{DynamicResource SettingsTextCaptureHelp}"
+                     Style="{StaticResource SecondaryText}" TextWrapping="Wrap" />
+          <TextBlock x:Name="PrivacyMigrationNotice" Margin="0,9,0,0"
+                     Text="{DynamicResource SettingsTextPrivacyMigration}"
+                     Foreground="#B15D00" FontWeight="SemiBold" TextWrapping="Wrap" />
+          <TextBlock Margin="0,10,0,0" Text="{DynamicResource SettingsExcludedAppsLabel}"
+                     Style="{StaticResource SectionTitleText}" />
+          <TextBox x:Name="ExcludedAppsBox" Margin="0,7,0,0" />
+          <TextBlock Margin="0,5,0,0" Text="{DynamicResource SettingsExcludedAppsHelp}"
+                     Style="{StaticResource SecondaryText}" TextWrapping="Wrap" />
+          <CheckBox x:Name="StartupBox" Margin="0,10,0,0"
+                    Content="{DynamicResource SettingsStartAtLogin}" />
+          <TextBlock Margin="0,5,0,0" Text="{DynamicResource SettingsStartAtLoginHelp}"
+                     Style="{StaticResource SecondaryText}" />
+        </StackPanel>
+
+        <Border Grid.Row="7" Height="1" VerticalAlignment="Center"
+                Background="{StaticResource SoftSeparatorBrush}" />
+
+        <Border Grid.Row="8" Style="{StaticResource InsetCard}" Padding="14,10">
+          <DockPanel LastChildFill="True">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+              <Button Click="RepairButton_Click" Content="{DynamicResource SettingsRepairAssociation}" />
+              <Button Click="PixPinButton_Click" Content="{DynamicResource SettingsPixPin}" />
+            </StackPanel>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="{DynamicResource SettingsIntegrationLabel}" Style="{StaticResource SectionTitleText}" />
+              <TextBlock Text="{DynamicResource SettingsIntegrationHelp}" Style="{StaticResource SecondaryText}" />
+            </StackPanel>
+          </DockPanel>
+        </Border>
+      </Grid>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button IsCancel="True" Content="{DynamicResource CommonCancel}" />
+      <Button Style="{StaticResource PrimaryButton}" Click="SaveButton_Click"
+              Margin="7,0,3,0" MinWidth="82" IsDefault="True"
+              Content="{DynamicResource CommonSave}" />
+    </StackPanel>
+  </Grid>
+</Window>
