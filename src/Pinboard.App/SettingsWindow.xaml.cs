@@ -27,6 +27,7 @@ public partial class SettingsWindow : Window
         FixedTargetBox.IsEnabled = !string.IsNullOrWhiteSpace(activeDocumentPath);
         TextCaptureBox.IsChecked = settings.TextCaptureEnabled;
         PauseTextCaptureBox.IsChecked = settings.TextCapturePaused;
+        TextCaptureBoardModeBox.SelectedIndex = settings.TextCaptureBoardMode == TextCaptureBoardMode.Monthly ? 0 : 1;
         TextPrivacyModeBox.IsChecked = settings.TextPrivacyModeEnabled;
         ExcludedAppsBox.Text = string.Join("; ", settings.TextCaptureExcludedApplications);
         PrivacyMigrationNotice.Visibility = settings.TextPrivacyReviewPending
@@ -89,6 +90,9 @@ public partial class SettingsWindow : Window
             _settings.FixedCaptureTarget = FixedTargetBox.IsChecked == true ? _activeDocumentPath : null;
             _settings.TextCaptureEnabled = TextCaptureBox.IsChecked == true;
             _settings.TextCapturePaused = PauseTextCaptureBox.IsChecked == true;
+            _settings.TextCaptureBoardMode = TextCaptureBoardModeBox.SelectedIndex == 1
+                ? TextCaptureBoardMode.LegacySingleBoard
+                : TextCaptureBoardMode.Monthly;
             _settings.TextPrivacyModeEnabled = TextPrivacyModeBox.IsChecked == true;
             _settings.TextCaptureExcludedApplications = AppSettings.NormalizeApplicationNames(
                 ExcludedAppsBox.Text.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));

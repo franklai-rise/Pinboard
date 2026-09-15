@@ -58,7 +58,7 @@ public partial class MainWindow : Window
         _obsidianImporter = new ObsidianImporter(_imageProcessor, _ocrService);
         _projectLibrary = new ProjectLibraryService(settings.LibraryPath);
         var sidebarView = CollectionViewSource.GetDefaultView(_sidebarDocuments);
-        sidebarView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SidebarDocument.ProjectDisplayName)));
+        sidebarView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SidebarDocument.SectionDisplayName)));
         SidebarList.ItemsSource = sidebarView;
         ApplySidebarState();
         ApplyAlwaysOnTopState();
@@ -683,10 +683,6 @@ public partial class MainWindow : Window
                 canvasReloaded = true;
             }
 
-            if (!IsVisible)
-            {
-                ShowNotification(L("TextClipAddedTitleFormat", document.Title), L("TextClipAddedBody"));
-            }
             SetStatus(L("StatusTextClipAddedFormat", document.Title));
         }
         catch (Exception ex)
@@ -834,42 +830,45 @@ public partial class MainWindow : Window
         });
         menu.Items.Add(new System.Windows.Controls.Separator());
 
-        if (item.IsCaptureTarget)
+        if (!item.IsTextBoard)
         {
-            var monthlyTargetItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuUseMonthlyTarget") };
-            monthlyTargetItem.Click += (_, _) => UseMonthlyCaptureTarget();
-            menu.Items.Add(monthlyTargetItem);
-        }
-        else
-        {
-            var fixedTargetItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuSetCaptureTarget") };
-            fixedTargetItem.Click += (_, _) => SetFixedCaptureTarget(item);
-            menu.Items.Add(fixedTargetItem);
-        }
-        menu.Items.Add(new System.Windows.Controls.Separator());
+            if (item.IsCaptureTarget)
+            {
+                var monthlyTargetItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuUseMonthlyTarget") };
+                monthlyTargetItem.Click += (_, _) => UseMonthlyCaptureTarget();
+                menu.Items.Add(monthlyTargetItem);
+            }
+            else
+            {
+                var fixedTargetItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuSetCaptureTarget") };
+                fixedTargetItem.Click += (_, _) => SetFixedCaptureTarget(item);
+                menu.Items.Add(fixedTargetItem);
+            }
+            menu.Items.Add(new System.Windows.Controls.Separator());
 
-        var renameItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuRename") };
-        renameItem.Click += async (_, _) => await RenameBoardAsync(item);
-        menu.Items.Add(renameItem);
+            var renameItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuRename") };
+            renameItem.Click += async (_, _) => await RenameBoardAsync(item);
+            menu.Items.Add(renameItem);
 
-        if (item.IsArchived)
-        {
-            var restoreItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuRestore") };
-            restoreItem.Click += async (_, _) => await PromptMoveBoardAsync(item);
-            menu.Items.Add(restoreItem);
+            if (item.IsArchived)
+            {
+                var restoreItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuRestore") };
+                restoreItem.Click += async (_, _) => await PromptMoveBoardAsync(item);
+                menu.Items.Add(restoreItem);
+            }
+            else if (item.CanMove)
+            {
+                var moveItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuMove") };
+                moveItem.Click += async (_, _) => await PromptMoveBoardAsync(item);
+                menu.Items.Add(moveItem);
+
+                var archiveItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuArchive") };
+                archiveItem.Click += async (_, _) => await ArchiveBoardAsync(item);
+                menu.Items.Add(archiveItem);
+            }
+
+            menu.Items.Add(new System.Windows.Controls.Separator());
         }
-        else if (item.CanMove)
-        {
-            var moveItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuMove") };
-            moveItem.Click += async (_, _) => await PromptMoveBoardAsync(item);
-            menu.Items.Add(moveItem);
-
-            var archiveItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuArchive") };
-            archiveItem.Click += async (_, _) => await ArchiveBoardAsync(item);
-            menu.Items.Add(archiveItem);
-        }
-
-        menu.Items.Add(new System.Windows.Controls.Separator());
         var showItem = new System.Windows.Controls.MenuItem { Header = L("BoardMenuShowInExplorer") };
         showItem.Click += (_, _) => ShowFileInExplorer(item.Path);
         menu.Items.Add(showItem);
@@ -1406,9 +1405,20 @@ public partial class MainWindow : Window
             paths.Add(Path.GetFullPath(path));
         }
 
-        var boardItems = paths
+        var libraryFiles = paths
             .Select(path => new FileInfo(path))
-            .Select(file => new { File = file, Project = _projectLibrary.GetProjectName(file.FullName) })
+            .Select(file => new
+            {
+                File = file,
+                TextKind = TextClipsLibrary.GetDocumentKind(_settings.LibraryPath, file.FullName)
+            })
+            .ToList();
+        var textBoardItems = libraryFiles
+            .Where(item => item.TextKind != TextClipsDocumentKind.None)
+            .ToList();
+        var boardItems = libraryFiles
+            .Where(item => item.TextKind == TextClipsDocumentKind.None)
+            .Select(item => new { item.File, Project = _projectLibrary.GetProjectName(item.File.FullName) })
             .ToList();
 
         var projectNames = new HashSet<string>(StringComparer.CurrentCultureIgnoreCase)
@@ -1447,7 +1457,7 @@ public partial class MainWindow : Window
         var projectCounts = boardItems
             .GroupBy(item => item.Project, StringComparer.CurrentCultureIgnoreCase)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.CurrentCultureIgnoreCase);
-        var items = boardItems
+        var regularItems = boardItems
             .Select(item => new SidebarDocument(
                 item.File.FullName,
                 PinboardDocument.ReadDisplayTitle(item.File.FullName),
@@ -1460,11 +1470,12 @@ public partial class MainWindow : Window
                 CanCreateBoard: !item.Project.Equals(ProjectLibraryService.OtherLocationProjectName, StringComparison.CurrentCultureIgnoreCase)
                     && !item.Project.Equals(ProjectLibraryService.ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase),
                 IsCaptureTarget: fixedCaptureTarget is not null
-                    && item.File.FullName.Equals(fixedCaptureTarget, StringComparison.OrdinalIgnoreCase)))
+                    && item.File.FullName.Equals(fixedCaptureTarget, StringComparison.OrdinalIgnoreCase),
+                Kind: SidebarDocumentKind.Board))
             .ToList();
         foreach (var project in projectNames.Where(project => !projectCounts.ContainsKey(project)))
         {
-            items.Add(new SidebarDocument(
+            regularItems.Add(new SidebarDocument(
                 string.Empty,
                 L("SidebarNoBoardPlaceholder"),
                 L("SidebarNoBoardHelp"),
@@ -1475,9 +1486,30 @@ public partial class MainWindow : Window
                 CanMove: false,
                 CanCreateBoard: !project.Equals(ProjectLibraryService.OtherLocationProjectName, StringComparison.CurrentCultureIgnoreCase)
                     && !project.Equals(ProjectLibraryService.ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase),
-                IsCaptureTarget: false));
+                IsCaptureTarget: false,
+                Kind: SidebarDocumentKind.Board));
         }
-        items = items
+        var textItems = textBoardItems
+            .Select(item => new SidebarDocument(
+                item.File.FullName,
+                item.TextKind == TextClipsDocumentKind.Legacy
+                    ? L("SidebarTextClipsHistory")
+                    : Path.GetFileNameWithoutExtension(item.File.Name),
+                FormatSidebarDetail(item.File),
+                AppSettings.TextClipsDirectoryName,
+                L("SidebarTextClips"),
+                textBoardItems.Count,
+                IsPlaceholder: false,
+                CanMove: false,
+                CanCreateBoard: false,
+                IsCaptureTarget: false,
+                Kind: item.TextKind == TextClipsDocumentKind.Legacy
+                    ? SidebarDocumentKind.TextClipsLegacy
+                    : SidebarDocumentKind.TextClipsMonthly))
+            .OrderBy(item => item.Kind == SidebarDocumentKind.TextClipsLegacy ? 1 : 0)
+            .ThenByDescending(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
+            .ToList();
+        regularItems = regularItems
             .OrderBy(item => item.ProjectName.Equals(ProjectLibraryService.DefaultProjectName, StringComparison.CurrentCultureIgnoreCase)
                 ? 0
                 : item.ProjectName.Equals(ProjectLibraryService.ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase) ? 2
@@ -1486,6 +1518,7 @@ public partial class MainWindow : Window
             .ThenBy(item => item.IsPlaceholder)
             .ThenBy(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+        var items = textItems.Concat(regularItems).ToList();
 
         _sidebarSelectionChanging = true;
         try
@@ -1887,6 +1920,13 @@ public partial class MainWindow : Window
         return null;
     }
 
+    private enum SidebarDocumentKind
+    {
+        Board,
+        TextClipsMonthly,
+        TextClipsLegacy
+    }
+
     private sealed record SidebarDocument(
         string Path,
         string Title,
@@ -1897,8 +1937,11 @@ public partial class MainWindow : Window
         bool IsPlaceholder,
         bool CanMove,
         bool CanCreateBoard,
-        bool IsCaptureTarget)
+        bool IsCaptureTarget,
+        SidebarDocumentKind Kind)
     {
+        public string SectionDisplayName => IsTextBoard ? LocalizationService.T("SidebarTextClips") : ProjectDisplayName;
+        public bool IsTextBoard => Kind is SidebarDocumentKind.TextClipsMonthly or SidebarDocumentKind.TextClipsLegacy;
         public bool IsArchived => ProjectName.Equals(ProjectLibraryService.ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase);
         public bool IsDefaultExpanded => !IsArchived;
 

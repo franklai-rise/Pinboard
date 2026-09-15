@@ -5,8 +5,9 @@ namespace Pinboard.App.Models;
 
 public sealed class AppSettings
 {
-    public const int CurrentSettingsSchemaVersion = 2;
+    public const int CurrentSettingsSchemaVersion = 3;
     public const string TextClipsBoardFileName = "Text Clips.pinboard";
+    public const string TextClipsDirectoryName = "Text Clips";
 
     public int SettingsSchemaVersion { get; set; } = CurrentSettingsSchemaVersion;
     public string LibraryPath { get; set; } = DefaultLibraryPath;
@@ -20,6 +21,7 @@ public sealed class AppSettings
     // are preserved by Load().
     public bool TextCaptureEnabled { get; set; }
     public bool TextCapturePaused { get; set; }
+    public TextCaptureBoardMode TextCaptureBoardMode { get; set; } = TextCaptureBoardMode.Monthly;
     public bool TextPrivacyModeEnabled { get; set; } = true;
     public bool TextPrivacyReviewPending { get; set; }
     public List<string> TextCaptureExcludedApplications { get; set; } = CreateDefaultExcludedApplications();
@@ -69,6 +71,7 @@ public sealed class AppSettings
                         ? parsedVersion
                         : 1;
                     var hadTextCapturePreference = root.TryGetProperty(nameof(TextCaptureEnabled), out _);
+                    var hadTextCaptureBoardMode = root.TryGetProperty(nameof(TextCaptureBoardMode), out _);
 
                     // A preference explicitly saved by an existing installation is
                     // authoritative. Settings from before text collection existed
@@ -76,6 +79,12 @@ public sealed class AppSettings
                     if (!hadTextCapturePreference)
                     {
                         settings.TextCaptureEnabled = false;
+                    }
+                    if (!hadTextCaptureBoardMode)
+                    {
+                        // Existing installations used one root-level Text Clips file.
+                        // Preserve that layout unless the user explicitly chooses monthly boards.
+                        settings.TextCaptureBoardMode = TextCaptureBoardMode.LegacySingleBoard;
                     }
                     if (previousVersion < CurrentSettingsSchemaVersion && settings.TextCaptureEnabled)
                     {
@@ -94,7 +103,7 @@ public sealed class AppSettings
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .Take(12)
                         .ToList();
-                    if (previousVersion < CurrentSettingsSchemaVersion || !hadTextCapturePreference)
+                    if (previousVersion < CurrentSettingsSchemaVersion || !hadTextCapturePreference || !hadTextCaptureBoardMode)
                     {
                         try
                         {
@@ -182,11 +191,20 @@ public sealed class AppSettings
         return Path.Combine(LibraryPath, $"{now:yyyy-MM}.pinboard");
     }
 
-    public string ResolveTextCaptureTarget()
+    public string ResolveTextCaptureTarget(DateTimeOffset now)
     {
         Directory.CreateDirectory(LibraryPath);
-        return Path.Combine(LibraryPath, TextClipsBoardFileName);
+        if (TextCaptureBoardMode == TextCaptureBoardMode.LegacySingleBoard)
+        {
+            return Path.Combine(LibraryPath, TextClipsBoardFileName);
+        }
+
+        var directory = Path.Combine(LibraryPath, TextClipsDirectoryName);
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, $"{now:yyyy-MM}.pinboard");
     }
+
+    public string ResolveTextCaptureTarget() => ResolveTextCaptureTarget(DateTimeOffset.Now);
 
     public void Remember(string path)
     {

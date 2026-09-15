@@ -8,7 +8,8 @@ Pinboard 是一个本地优先的 Windows 视觉剪贴板工作台。它使用 P
 
 - 项目与画板：`%USERPROFILE%\Documents\Pinboard\项目名\画板名.pinboard`
 - 自动月度接收画板：`%USERPROFILE%\Documents\Pinboard\YYYY-MM.pinboard`
-- 可选文字收集画板：`%USERPROFILE%\Documents\Pinboard\Text Clips.pinboard`
+- 月度文字剪藏画板：`%USERPROFILE%\Documents\Pinboard\Text Clips\YYYY-MM.pinboard`
+- 旧版文字历史（如已存在）：`%USERPROFILE%\Documents\Pinboard\Text Clips.pinboard`
 - 本机设置与故障恢复：`%LocalAppData%\Pinboard`
 
 画板目录可在设置中更改。程序不会依赖开发者电脑上的盘符或安装路径；便携版可放在任意有写入权限的位置。
@@ -19,7 +20,7 @@ Pinboard 是一个本地优先的 Windows 视觉剪贴板工作台。它使用 P
 2. 以后像平时一样按 PixPin 的 `Ctrl+Alt+A`，并在截图后按 `Enter`、`Ctrl+C` 或点击复制图标。
 3. Pinboard 会接收这一次普通截图，并自动以两列瀑布流错开放进当月画板；不再需要粘贴到微信或 Pinboard。
 4. 取消截图或不复制图片时，不会生成空白内容。可选的 `Ctrl+Alt+P` 自定义动作只用于“Pinboard 尚未运行时也自动启动接收器”的场景。
-5. 如需收集复制的文字，请先在设置中明确开启。开启后，普通文字会进入 `Text Clips` 画板并按时间生成卡片。
+5. 如需收集复制的文字，请先在设置中明确开启。开启后，普通文字会进入左侧独立的 `Text Clips` 分栏；每月一张画板，卡片按时间生成并纵向排列。
 
 Pinboard 默认会在登录 Windows 后静默启动到系统托盘，以便普通 PixPin 截图随时能被自动收录。可在“设置 → Screenshot receiving / 截图接收”中关闭“Start Pinboard when I sign in / 登录 Windows 时启动 Pinboard”。
 

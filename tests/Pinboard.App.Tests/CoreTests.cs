@@ -53,18 +53,33 @@ public sealed class CoreTests
         var settings = new AppSettings { LibraryPath = temp.Path };
 
         Assert.IsFalse(settings.TextCaptureEnabled);
+        Assert.AreEqual(TextCaptureBoardMode.Monthly, settings.TextCaptureBoardMode);
         Assert.AreEqual(
-            Path.Combine(temp.Path, AppSettings.TextClipsBoardFileName),
-            settings.ResolveTextCaptureTarget());
+            Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "2026-08.pinboard"),
+            settings.ResolveTextCaptureTarget(new DateTimeOffset(2026, 8, 31, 23, 59, 0, TimeSpan.Zero)));
     }
 
     [TestMethod]
-    public void AppSettings_LegacySettingsKeepTextCaptureDisabledByDefault()
+    public void AppSettings_NewSettingsDefaultToDisabledMonthlyTextCapture()
     {
         var legacy = JsonSerializer.Deserialize<AppSettings>("{\"LibraryPath\":\"Pinboards\"}");
 
         Assert.IsNotNull(legacy);
         Assert.IsFalse(legacy.TextCaptureEnabled);
+        Assert.AreEqual(TextCaptureBoardMode.Monthly, legacy.TextCaptureBoardMode);
+    }
+
+    [TestMethod]
+    public void TextClipsLibrary_ClassifiesMonthlyAndLegacyBoardsWithoutTreatingProjectsAsTextBoards()
+    {
+        using var temp = new TemporaryDirectory();
+        var legacy = Path.Combine(temp.Path, AppSettings.TextClipsBoardFileName);
+        var monthly = Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "2026-09.pinboard");
+        var regularProjectBoard = Path.Combine(temp.Path, "Research", "2026-09.pinboard");
+
+        Assert.AreEqual(TextClipsDocumentKind.Legacy, TextClipsLibrary.GetDocumentKind(temp.Path, legacy));
+        Assert.AreEqual(TextClipsDocumentKind.Monthly, TextClipsLibrary.GetDocumentKind(temp.Path, monthly));
+        Assert.AreEqual(TextClipsDocumentKind.None, TextClipsLibrary.GetDocumentKind(temp.Path, regularProjectBoard));
     }
 
     [TestMethod]
@@ -270,6 +285,21 @@ public sealed class CoreTests
     }
 
     [TestMethod]
+    public async Task Document_MonthlyTextClipsBoardUsesTheTextLayout()
+    {
+        using var temp = new TemporaryDirectory();
+        var path = Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "2026-09.pinboard");
+        var document = new PinboardDocument(path);
+
+        await document.InitializeAsync();
+        var snapshot = await document.LoadSnapshotAsync();
+        using var scene = JsonDocument.Parse(snapshot.SceneJson);
+
+        Assert.AreEqual("text", scene.RootElement.GetProperty("elements")[0].GetProperty("type").GetString());
+        Assert.AreEqual("SceneTextClipsLayoutLabel", scene.RootElement.GetProperty("elements")[0].GetProperty("text").GetString());
+    }
+
+    [TestMethod]
     public async Task Document_DisplayTitlePersistsWithoutRenamingTheActualFile()
     {
         using var temp = new TemporaryDirectory();
@@ -391,6 +421,12 @@ public sealed class CoreTests
         Assert.AreNotEqual(movedPath, nextPath);
         StringAssert.Contains(Path.GetFileName(nextPath), "(2)");
         Assert.IsFalse(new AppSettings().AlwaysOnTop);
+    }
+
+    [TestMethod]
+    public void ProjectLibrary_ReservesTextClipsDirectoryForAutomaticTextBoards()
+    {
+        Assert.IsNotNull(ProjectLibraryService.ValidateProjectName(AppSettings.TextClipsDirectoryName, allowDefaultProject: false));
     }
 
     [TestMethod]

@@ -1,3 +1,5 @@
+using Pinboard.App.Models;
+
 namespace Pinboard.App.Services;
 
 public sealed class ProjectLibraryService
@@ -23,7 +25,8 @@ public sealed class ProjectLibraryService
         var projects = Directory.EnumerateDirectories(LibraryPath, "*", SearchOption.TopDirectoryOnly)
             .Select(Path.GetFileName)
             .Where(name => !string.IsNullOrWhiteSpace(name)
-                && !name.Equals(ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase))
+                && !name.Equals(ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase)
+                && !name.Equals(AppSettings.TextClipsDirectoryName, StringComparison.CurrentCultureIgnoreCase))
             .Cast<string>()
             .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
@@ -144,7 +147,8 @@ public sealed class ProjectLibraryService
         }
         if (projectName.Equals(DefaultProjectName, StringComparison.CurrentCultureIgnoreCase)
             || projectName.Equals(OtherLocationProjectName, StringComparison.CurrentCultureIgnoreCase)
-            || projectName.Equals(ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase))
+            || projectName.Equals(ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase)
+            || projectName.Equals(AppSettings.TextClipsDirectoryName, StringComparison.CurrentCultureIgnoreCase))
         {
             return LocalizationService.T("ProjectNameReserved");
         }

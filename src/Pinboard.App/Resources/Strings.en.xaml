@@ -157,6 +157,8 @@
   <sys:String x:Key="SidebarTodayFormat">Today {0:HH:mm}</sys:String>
   <sys:String x:Key="SidebarCaptureTargetBadge">RECEIVING</sys:String>
   <sys:String x:Key="SidebarCaptureTargetToolTip">PixPin screenshots are saved to this board.</sys:String>
+  <sys:String x:Key="SidebarTextClips">Text Clips</sys:String>
+  <sys:String x:Key="SidebarTextClipsHistory">History</sys:String>
   <sys:String x:Key="CaptureTargetFormat">Receiving: {0}</sys:String>
   <sys:String x:Key="TrayCurrentTargetFormat">Current target: {0}</sys:String>
   <sys:String x:Key="TrayOpen">Open Pinboard</sys:String>
@@ -279,6 +281,10 @@
   <sys:String x:Key="SceneTextClipTimestampFormat">Copied {0:yyyy-MM-dd HH:mm}</sys:String>
   <sys:String x:Key="SettingsTextCapture">Automatically save copied text to the Text Clips board</sys:String>
   <sys:String x:Key="SettingsPauseTextCapture">Pause copied-text receiving</sys:String>
+  <sys:String x:Key="SettingsTextBoardMode">Text board organization</sys:String>
+  <sys:String x:Key="SettingsTextBoardModeMonthly">One board per month</sys:String>
+  <sys:String x:Key="SettingsTextBoardModeSingle">Continue in the legacy single board</sys:String>
+  <sys:String x:Key="SettingsTextBoardModeHelp">Monthly boards are stored under Text Clips and shown separately from projects.</sys:String>
   <sys:String x:Key="SettingsTextPrivacyMode">Filter common credentials, verification codes, and payment card numbers</sys:String>
   <sys:String x:Key="SettingsTextCaptureHelp">Text collection is off on new installations. The privacy filter and app exclusions reduce accidental collection but cannot identify every secret; review sensitive content before copying it.</sys:String>
   <sys:String x:Key="SettingsTextPrivacyMigration">Your existing text-collection choice was preserved. Review these privacy controls, then Save to dismiss this notice.</sys:String>

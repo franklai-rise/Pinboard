@@ -986,15 +986,25 @@ public sealed class PinboardDocument
             INSERT OR IGNORE INTO scene_current(id, scene_data, scene_encoding, revision, updated_utc)
             VALUES(1, $scene, $encoding, 1, $now);
             """;
-        var scene = FileName.Equals(
-            Path.GetFileNameWithoutExtension(AppSettings.TextClipsBoardFileName),
-            StringComparison.OrdinalIgnoreCase)
+        var scene = IsTextClipsDocumentPath(FilePath)
             ? SceneBuilder.CreateTextClipsScene()
             : SceneBuilder.CreateDefaultScene();
         sceneCommand.Parameters.AddWithValue("$scene", EncodeScene(scene));
         sceneCommand.Parameters.AddWithValue("$encoding", BrotliEncoding);
         sceneCommand.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
         await sceneCommand.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static bool IsTextClipsDocumentPath(string path)
+    {
+        if (Path.GetFileName(path).Equals(AppSettings.TextClipsBoardFileName, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        var parent = Path.GetDirectoryName(path);
+        return parent is not null
+            && Path.GetFileName(parent).Equals(AppSettings.TextClipsDirectoryName, StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task<int> ReadAndValidateSchemaVersionAsync(SqliteConnection connection, CancellationToken cancellationToken)

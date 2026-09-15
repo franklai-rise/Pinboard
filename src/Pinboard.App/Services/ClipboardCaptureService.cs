@@ -9,6 +9,7 @@ namespace Pinboard.App.Services;
 public sealed class ClipboardCaptureService : IDisposable
 {
     private const int MaxCapturedTextLength = 100_000;
+    private const string TruncatedTextMarker = "\n\n[Pinboard: clipboard text was truncated at 100,000 characters.]";
     private static readonly object InternalTextLock = new();
     private static string? _internalText;
     private static DateTimeOffset _internalTextExpiresAt;
@@ -250,9 +251,12 @@ public sealed class ClipboardCaptureService : IDisposable
             return null;
         }
 
-        return text.Length <= MaxCapturedTextLength
-            ? text
-            : text[..MaxCapturedTextLength];
+        if (text.Length <= MaxCapturedTextLength)
+        {
+            return text;
+        }
+
+        return text[..(MaxCapturedTextLength - TruncatedTextMarker.Length)] + TruncatedTextMarker;
     }
 
     private static bool ConsumeInternalText(string text)
