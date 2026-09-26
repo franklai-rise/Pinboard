@@ -29,23 +29,22 @@ function New-PinboardLogoPng {
         210,
         210)
 
-    $cardPen = [System.Windows.Media.Pen]::new($white, 64)
-    $cardPen.LineJoin = [System.Windows.Media.PenLineJoin]::Round
-    $cardPen.Freeze()
     $drawing.DrawRoundedRectangle(
+        $white,
         $null,
-        $cardPen,
-        [System.Windows.Rect]::new(260, 280, 504, 360),
-        80,
-        80)
+        [System.Windows.Rect]::new(254, 248, 516, 420),
+        92,
+        92)
+    $drawing.DrawRoundedRectangle($blue, $null, [System.Windows.Rect]::new(326, 342, 372, 44), 22, 22)
+    $drawing.DrawRoundedRectangle($blue, $null, [System.Windows.Rect]::new(326, 446, 246, 38), 19, 19)
 
     $stem = [System.Windows.Media.StreamGeometry]::new()
     $stemContext = $stem.Open()
-    $stemContext.BeginFigure([System.Windows.Point]::new(475, 600), $true, $true)
-    $stemContext.LineTo([System.Windows.Point]::new(549, 600), $true, $false)
-    $stemContext.LineTo([System.Windows.Point]::new(549, 736), $true, $false)
-    $stemContext.LineTo([System.Windows.Point]::new(512, 820), $true, $false)
-    $stemContext.LineTo([System.Windows.Point]::new(475, 736), $true, $false)
+    $stemContext.BeginFigure([System.Windows.Point]::new(463, 640), $true, $true)
+    $stemContext.LineTo([System.Windows.Point]::new(561, 640), $true, $false)
+    $stemContext.LineTo([System.Windows.Point]::new(561, 746), $true, $false)
+    $stemContext.LineTo([System.Windows.Point]::new(512, 840), $true, $false)
+    $stemContext.LineTo([System.Windows.Point]::new(463, 746), $true, $false)
     $stemContext.Close()
     $stem.Freeze()
     $drawing.DrawGeometry($white, $null, $stem)

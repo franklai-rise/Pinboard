@@ -56,7 +56,7 @@
   <sys:String x:Key="BoardMenuRestore">Restore to a Project…</sys:String>
   <sys:String x:Key="BoardMenuDelete">Move to Recycle Bin…</sys:String>
   <sys:String x:Key="BoardMenuSetCaptureTarget">Set as Screenshot Target</sys:String>
-  <sys:String x:Key="BoardMenuUseMonthlyTarget">Use Current Month Automatically</sys:String>
+  <sys:String x:Key="BoardMenuUseMonthlyTarget">Use Daily Automatic Capture</sys:String>
   <sys:String x:Key="BoardMenuShowInExplorer">Show in File Explorer</sys:String>
   <sys:String x:Key="BoardMenuCopyPath">Copy File Path</sys:String>
   <sys:String x:Key="BoardActualPathFormat">Actual file: {0}</sys:String>
@@ -119,7 +119,7 @@
   <sys:String x:Key="SettingsOcrHelp">Recognition stays on this computer and enables search across boards.</sys:String>
   <sys:String x:Key="SettingsCaptureLabel">Screenshot receiving</sys:String>
   <sys:String x:Key="SettingsPauseCapture">Pause PixPin screenshot receiving</sys:String>
-  <sys:String x:Key="SettingsFixedTarget">Always receive into the current board (otherwise use the current month)</sys:String>
+  <sys:String x:Key="SettingsFixedTarget">Always receive into the current board (otherwise create a board each day)</sys:String>
   <sys:String x:Key="SettingsStartAtLogin">Start Pinboard when I sign in</sys:String>
   <sys:String x:Key="SettingsStartAtLoginHelp">Starts quietly in the system tray so PixPin screenshots can be saved automatically.</sys:String>
   <sys:String x:Key="SettingsRepairAssociation">Repair File Association</sys:String>
@@ -190,7 +190,7 @@
   <sys:String x:Key="CaptureAddedBody">Screenshot placed in the inbox. Click to open and locate it.</sys:String>
   <sys:String x:Key="StatusCaptureAddedFormat">Screenshot added to {0}</sys:String>
   <sys:String x:Key="StatusCaptureTargetSetFormat">Screenshots will now be saved to “{0}”.</sys:String>
-  <sys:String x:Key="StatusCaptureTargetAutoFormat">Screenshots will now use the monthly board: {0}.</sys:String>
+  <sys:String x:Key="StatusCaptureTargetAutoFormat">Screenshots will now use the daily automatic board: {0}.</sys:String>
   <sys:String x:Key="StatusCaptureRecoveryFormat">The target board could not be written. Screenshot recovered to {0}</sys:String>
   <sys:String x:Key="CaptureRecoveredTitle">Screenshot Recovered Safely</sys:String>
   <sys:String x:Key="CaptureRecoveredBodyFormat">The target file could not be written. Saved to {0}.</sys:String>
@@ -284,7 +284,7 @@
   <sys:String x:Key="SettingsTextBoardMode">Text board organization</sys:String>
   <sys:String x:Key="SettingsTextBoardModeMonthly">One board per month</sys:String>
   <sys:String x:Key="SettingsTextBoardModeSingle">Continue in the legacy single board</sys:String>
-  <sys:String x:Key="SettingsTextBoardModeHelp">Monthly boards are stored under Text Clips and shown separately from projects.</sys:String>
+  <sys:String x:Key="SettingsTextBoardModeHelp">Automatic text boards are stored under Text Clips and shown separately from projects.</sys:String>
   <sys:String x:Key="SettingsTextPrivacyMode">Filter common credentials, verification codes, and payment card numbers</sys:String>
   <sys:String x:Key="SettingsTextCaptureHelp">Text collection is off on new installations. The privacy filter and app exclusions reduce accidental collection but cannot identify every secret; review sensitive content before copying it.</sys:String>
   <sys:String x:Key="SettingsTextPrivacyMigration">Your existing text-collection choice was preserved. Review these privacy controls, then Save to dismiss this notice.</sys:String>
@@ -304,4 +304,22 @@
   <sys:String x:Key="StatusTextClipFailedFormat">Could not save copied text: {0}</sys:String>
   <sys:String x:Key="TextClipFailedTitle">Copied Text Could Not Be Saved</sys:String>
   <sys:String x:Key="SceneInvalid">The board scene data is invalid.</sys:String>
+  <sys:String x:Key="MainMoreToolTip">More actions</sys:String><sys:String x:Key="MainGoToBottom">↓ Bottom</sys:String><sys:String x:Key="MainGoToBottomToolTip">Go to the lowest content on this board</sys:String>
+  <sys:String x:Key="SidebarScreenshots">Screenshots</sys:String><sys:String x:Key="SidebarScreenshotsHistory">Screenshot History</sys:String>
+  <sys:String x:Key="SidebarToSort">To sort</sys:String>
+  <sys:String x:Key="TextNewBoardHeading">New text board</sys:String><sys:String x:Key="TextNewBoardDescription">Keep intentional clips separate from automatic daily boards</sys:String><sys:String x:Key="TextNewFolder">New text folder…</sys:String><sys:String x:Key="TextFolderLabel">Text folder</sys:String><sys:String x:Key="TextFolderHelp">Leave blank to place this board directly under Text Clips.</sys:String><sys:String x:Key="DefaultNewTextBoardName">Text board {0:MM-dd HHmm}</sys:String>
+  <sys:String x:Key="TextFolderTitle">New text folder</sys:String><sys:String x:Key="TextFolderPrompt">Folder name</sys:String><sys:String x:Key="TextFolderCreatedFormat">Text folder “{0}” created.</sys:String><sys:String x:Key="TextFolderInvalid">Enter a valid folder name.</sys:String><sys:String x:Key="TextFolderExistsFormat">Text folder “{0}” already exists.</sys:String><sys:String x:Key="TextBoardMove">Move to text folder…</sys:String><sys:String x:Key="TextBoardMovePrompt">Destination text folder</sys:String>
+  <sys:String x:Key="BoardMenuSetTextCaptureTarget">Set as text capture target</sys:String><sys:String x:Key="BoardMenuUseDailyTextTarget">Use daily text board</sys:String><sys:String x:Key="StatusTextCaptureTargetSetFormat">Copied text will be saved to “{0}”.</sys:String><sys:String x:Key="StatusTextCaptureTargetAutoFormat">Copied text will use daily board: {0}.</sys:String>
+  <sys:String x:Key="SettingsOpenFolder">Open folder</sys:String><sys:String x:Key="SettingsTextBoardModeDaily">One board per day</sys:String>
+  <sys:String x:Key="LibraryTitle">LIBRARY</sys:String>
+  <sys:String x:Key="LibrarySubtitle">Collect now. Make room for ideas.</sys:String>
+  <sys:String x:Key="LibraryCreate">Create board or folder</sys:String>
+  <sys:String x:Key="CaptureShort">Capture</sys:String>
+  <sys:String x:Key="SaveStateSaved">All changes saved</sys:String>
+  <sys:String x:Key="SaveStateDirty">Unsaved changes</sys:String>
+  <sys:String x:Key="SaveStateSaving">Saving…</sys:String>
+  <sys:String x:Key="SaveStateFailed">Save needs attention</sys:String>
+  <sys:String x:Key="StatusCanvasSleeping">Canvas asleep · automatic collection is still running</sys:String>
+  <sys:String x:Key="ExitSaveFailed">Your changes could not be saved. Pinboard will stay open so you can retry or save a copy.</sys:String>
+  <sys:String x:Key="SidebarProjects">Projects</sys:String>
 </ResourceDictionary>

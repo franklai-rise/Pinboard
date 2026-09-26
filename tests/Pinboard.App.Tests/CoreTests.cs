@@ -29,7 +29,7 @@ public sealed class CoreTests
     }
 
     [TestMethod]
-    public void AppSettings_SwitchesBetweenFixedAndMonthlyCaptureTargets()
+    public void AppSettings_SwitchesBetweenFixedAndDailyCaptureTargets()
     {
         using var temp = new TemporaryDirectory();
         var fixedTarget = Path.Combine(temp.Path, "Research", "paper-notes.pinboard");
@@ -43,19 +43,19 @@ public sealed class CoreTests
         Assert.AreEqual(Path.GetFullPath(fixedTarget), settings.ResolveCaptureTarget(date));
 
         settings.FixedCaptureTarget = null;
-        Assert.AreEqual(Path.Combine(temp.Path, "2026-08.pinboard"), settings.ResolveCaptureTarget(date));
+        Assert.AreEqual(Path.Combine(temp.Path, AppSettings.ScreenshotsDirectoryName, "2026-08-27.pinboard"), settings.ResolveCaptureTarget(date));
     }
 
     [TestMethod]
-    public void AppSettings_UsesOneDedicatedTextClipsBoard()
+    public void AppSettings_UsesDailyTextClipsBoardWhenEnabled()
     {
         using var temp = new TemporaryDirectory();
         var settings = new AppSettings { LibraryPath = temp.Path };
 
         Assert.IsFalse(settings.TextCaptureEnabled);
-        Assert.AreEqual(TextCaptureBoardMode.Monthly, settings.TextCaptureBoardMode);
+        settings.TextCaptureBoardMode = TextCaptureBoardMode.Daily;
         Assert.AreEqual(
-            Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "2026-08.pinboard"),
+            Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "2026-08-31.pinboard"),
             settings.ResolveTextCaptureTarget(new DateTimeOffset(2026, 8, 31, 23, 59, 0, TimeSpan.Zero)));
     }
 
@@ -70,16 +70,33 @@ public sealed class CoreTests
     }
 
     [TestMethod]
-    public void TextClipsLibrary_ClassifiesMonthlyAndLegacyBoardsWithoutTreatingProjectsAsTextBoards()
+    public void TextClipsLibrary_ClassifiesDailyMonthlyManualAndLegacyBoardsWithoutTreatingProjectsAsTextBoards()
     {
         using var temp = new TemporaryDirectory();
         var legacy = Path.Combine(temp.Path, AppSettings.TextClipsBoardFileName);
         var monthly = Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "2026-09.pinboard");
+        var daily = Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "2026-09-26.pinboard");
+        var manual = Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "Research", "quotes.pinboard");
         var regularProjectBoard = Path.Combine(temp.Path, "Research", "2026-09.pinboard");
 
         Assert.AreEqual(TextClipsDocumentKind.Legacy, TextClipsLibrary.GetDocumentKind(temp.Path, legacy));
         Assert.AreEqual(TextClipsDocumentKind.Monthly, TextClipsLibrary.GetDocumentKind(temp.Path, monthly));
+        Assert.AreEqual(TextClipsDocumentKind.Daily, TextClipsLibrary.GetDocumentKind(temp.Path, daily));
+        Assert.AreEqual(TextClipsDocumentKind.Manual, TextClipsLibrary.GetDocumentKind(temp.Path, manual));
         Assert.AreEqual(TextClipsDocumentKind.None, TextClipsLibrary.GetDocumentKind(temp.Path, regularProjectBoard));
+    }
+
+    [TestMethod]
+    public void ScreenshotBoardsLibrary_SeparatesDailyBoardsFromRootMonthHistory()
+    {
+        using var temp = new TemporaryDirectory();
+        var daily = Path.Combine(temp.Path, AppSettings.ScreenshotsDirectoryName, "2026-09-26.pinboard");
+        var history = Path.Combine(temp.Path, "2026-09.pinboard");
+        var projectBoard = Path.Combine(temp.Path, "Research", "2026-09-26.pinboard");
+
+        Assert.AreEqual(ScreenshotDocumentKind.Daily, ScreenshotBoardsLibrary.GetDocumentKind(temp.Path, daily));
+        Assert.AreEqual(ScreenshotDocumentKind.History, ScreenshotBoardsLibrary.GetDocumentKind(temp.Path, history));
+        Assert.AreEqual(ScreenshotDocumentKind.None, ScreenshotBoardsLibrary.GetDocumentKind(temp.Path, projectBoard));
     }
 
     [TestMethod]
@@ -427,6 +444,21 @@ public sealed class CoreTests
     public void ProjectLibrary_ReservesTextClipsDirectoryForAutomaticTextBoards()
     {
         Assert.IsNotNull(ProjectLibraryService.ValidateProjectName(AppSettings.TextClipsDirectoryName, allowDefaultProject: false));
+        Assert.IsNotNull(ProjectLibraryService.ValidateProjectName(AppSettings.ScreenshotsDirectoryName, allowDefaultProject: false));
+    }
+
+    [TestMethod]
+    public void TextClipsLibrary_ManualBoardsCannotEscapeTheTextClipsDirectory()
+    {
+        using var temp = new TemporaryDirectory();
+
+        Assert.ThrowsException<InvalidDataException>(() =>
+            TextClipsLibrary.CreateManualBoardPath(temp.Path, "..", "notes"));
+        Assert.ThrowsException<InvalidDataException>(() =>
+            TextClipsLibrary.CreateManualBoardPath(temp.Path, "folder/subfolder", "notes"));
+
+        var path = TextClipsLibrary.CreateManualBoardPath(temp.Path, "Research", "notes");
+        Assert.IsTrue(path.StartsWith(Path.Combine(temp.Path, AppSettings.TextClipsDirectoryName, "Research"), StringComparison.OrdinalIgnoreCase));
     }
 
     [TestMethod]

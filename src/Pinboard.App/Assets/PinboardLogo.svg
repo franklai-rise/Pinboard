@@ -1,6 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="Pinboard">
   <rect x="64" y="64" width="896" height="896" rx="210" fill="#007AFF" />
-  <rect x="260" y="280" width="504" height="360" rx="80"
-        fill="none" stroke="#FFFFFF" stroke-width="64" />
-  <path d="M475 600H549V736L512 820L475 736Z" fill="#FFFFFF" />
+  <rect x="254" y="248" width="516" height="420" rx="92" fill="#FFFFFF" />
+  <rect x="326" y="342" width="372" height="44" rx="22" fill="#007AFF" />
+  <rect x="326" y="446" width="246" height="38" rx="19" fill="#007AFF" />
+  <path d="M463 640H561V746L512 840L463 746Z" fill="#FFFFFF" />
 </svg>

@@ -1,7 +1,7 @@
 :root {
   font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
   color: #1d1d1f;
-  background: #f5f5f7;
+  background: #ffffff;
   color-scheme: light;
   font-synthesis: none;
   text-rendering: geometricPrecision;
@@ -22,14 +22,12 @@ body,
 }
 
 body {
-  background: #f5f5f7;
+  background: #ffffff;
 }
 
 .canvas-shell {
   position: relative;
-  background:
-    radial-gradient(circle at 50% -20%, rgba(0, 122, 255, 0.045), transparent 38%),
-    #f5f5f7;
+  background: #ffffff;
 }
 
 .loading {
@@ -38,8 +36,21 @@ body {
   inset: 0;
   display: grid;
   place-items: center;
-  background: rgba(245, 245, 247, 0.82);
-  backdrop-filter: blur(18px) saturate(1.25);
+  background: #fbfbfc;
+}
+
+.loading--mutation {
+  background: transparent;
+}
+
+.loading--mutation .loading-card {
+  align-self: end;
+  margin-bottom: 70px;
+  padding: 10px 14px;
+}
+
+.loading--mutation .loading-copy small {
+  display: none;
 }
 
 .loading-card {
@@ -49,10 +60,10 @@ body {
   min-width: 238px;
   padding: 17px 20px;
   color: #1d1d1f;
-  background: rgba(255, 255, 255, 0.94);
-  border: 1px solid rgba(0, 0, 0, 0.08);
-  border-radius: 16px;
-  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.12);
+  background: #ffffff;
+  border: 1px solid #e9e9ed;
+  border-radius: 14px;
+  box-shadow: 0 3px 14px rgba(0, 0, 0, 0.035);
 }
 
 .loading-spinner {
@@ -83,19 +94,18 @@ body {
 .save-status {
   position: absolute;
   z-index: 90;
-  right: 14px;
-  bottom: 14px;
+  right: 18px;
+  bottom: 112px;
   display: flex;
   align-items: center;
   gap: 8px;
   min-height: 34px;
   padding: 7px 10px;
   color: #4a4a4f;
-  background: rgba(255, 255, 255, 0.92);
+  background: #ffffff;
   border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 11px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
-  backdrop-filter: blur(18px) saturate(1.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.055);
   font-size: 11px;
   font-weight: 600;
 }
@@ -155,21 +165,20 @@ body {
   --button-selected-bg: #e8f2ff;
   --button-selected-border: #e8f2ff;
   --button-selected-hover-bg: #dcecff;
-  --color-surface-high: rgba(255, 255, 255, 0.94);
-  --default-bg-color: #f5f5f7;
+  --color-surface-high: #ffffff;
+  --default-bg-color: #ffffff;
   font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif !important;
 }
 
 .excalidraw .App-menu_top {
-  top: 10px;
+  top: 16px;
 }
 
 .excalidraw .Island {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  border-radius: 14px !important;
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.11) !important;
-  backdrop-filter: blur(20px) saturate(1.35);
+  background: #ffffff !important;
+  border: 1px solid #e8e8ed !important;
+  border-radius: 12px !important;
+  box-shadow: 0 2px 9px rgba(0, 0, 0, 0.045) !important;
 }
 
 .excalidraw .App-toolbar-container .Island,
@@ -211,7 +220,7 @@ body {
 .excalidraw .Modal__content {
   border-color: rgba(0, 0, 0, 0.08) !important;
   border-radius: 16px !important;
-  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.16) !important;
+  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.065) !important;
 }
 
 .excalidraw input,
@@ -222,7 +231,75 @@ body {
 
 .excalidraw .popover {
   border-radius: 14px !important;
-  box-shadow: 0 12px 38px rgba(0, 0, 0, 0.14) !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.075) !important;
+}
+
+.bottom-button {
+  position: absolute;
+  z-index: 5;
+  right: 18px;
+  bottom: 62px;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: #ffffff;
+  color: #5d6571;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.045);
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.bottom-button:hover:not(:disabled) {
+  color: #007aff;
+  background: #f2f7ff;
+}
+
+.bottom-button:focus-visible {
+  outline: 2px solid #007aff;
+  outline-offset: 3px;
+}
+
+.bottom-button:disabled {
+  opacity: 0.3;
+  box-shadow: none;
+  cursor: default;
+}
+
+.empty-board {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px;
+  color: #9ca3af;
+  pointer-events: none;
+  text-align: center;
+}
+
+.empty-board strong {
+  margin-top: 4px;
+  color: #616772;
+  font-size: 17px;
+  font-weight: 550;
+  letter-spacing: -0.25px;
+}
+
+.empty-board span {
+  max-width: 340px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+@media (max-width: 620px) {
+  .bottom-button { right: 12px; bottom: 66px; }
+  .save-status { right: 12px; bottom: 114px; max-width: calc(100% - 24px); }
 }
 
 @media (prefers-reduced-motion: reduce) {

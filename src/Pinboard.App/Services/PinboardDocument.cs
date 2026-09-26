@@ -132,7 +132,15 @@ public sealed class PinboardDocument
         }
     }
 
-    public async Task<DocumentSnapshot> LoadSnapshotAsync(CancellationToken cancellationToken = default)
+    public Task<DocumentSnapshot> LoadSnapshotAsync(CancellationToken cancellationToken = default) =>
+        LoadSnapshotAsync(includeFiles: true, cancellationToken);
+
+    /// <summary>
+    /// Loads the current scene and, when requested, only its live image resources.
+    /// History-only and deleted resources remain in the document for recovery, but
+    /// do not need a second in-memory base64 copy merely to open or locate content.
+    /// </summary>
+    public async Task<DocumentSnapshot> LoadSnapshotAsync(bool includeFiles, CancellationToken cancellationToken = default)
     {
         await InitializeAsync(cancellationToken);
         await _gate.WaitAsync(cancellationToken);
@@ -143,13 +151,26 @@ public sealed class PinboardDocument
             var (scene, revision) = await ReadCurrentSceneAsync(connection, version, cancellationToken);
 
             var files = new List<AssetPayload>();
+            if (!includeFiles)
+            {
+                return new DocumentSnapshot(FilePath, Title, scene, files, revision);
+            }
+
+            var liveFileIds = GetLiveImageFileIds(scene);
+            if (liveFileIds.Count == 0)
+            {
+                return new DocumentSnapshot(FilePath, Title, scene, files, revision);
+            }
+
             await using var fileCommand = connection.CreateCommand();
             fileCommand.CommandText = """
                 SELECT fm.file_id, a.hash, a.mime_type, a.width, a.height, a.bytes, fm.created_utc
                 FROM file_map fm
                 JOIN assets a ON a.hash = fm.asset_hash
+                WHERE fm.file_id IN (SELECT value FROM json_each($fileIds))
                 ORDER BY fm.created_utc;
                 """;
+            fileCommand.Parameters.AddWithValue("$fileIds", JsonSerializer.Serialize(liveFileIds));
             await using var fileReader = await fileCommand.ExecuteReaderAsync(cancellationToken);
             while (await fileReader.ReadAsync(cancellationToken))
             {
@@ -174,6 +195,68 @@ public sealed class PinboardDocument
         {
             _gate.Release();
         }
+    }
+
+    /// <summary>Looks up image references without reading or encoding their binary resources.</summary>
+    public async Task<IReadOnlyList<string>> FindFileIdsByHashAsync(string assetHash, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(assetHash))
+        {
+            return [];
+        }
+
+        await InitializeAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT file_id FROM file_map WHERE asset_hash=$hash COLLATE NOCASE ORDER BY created_utc, file_id";
+            command.Parameters.AddWithValue("$hash", assetHash);
+            var fileIds = new List<string>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                fileIds.Add(reader.GetString(0));
+            }
+            return fileIds;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private static HashSet<string> GetLiveImageFileIds(string sceneJson)
+    {
+        var fileIds = new HashSet<string>(StringComparer.Ordinal);
+        using var scene = JsonDocument.Parse(sceneJson);
+        if (!scene.RootElement.TryGetProperty("elements", out var elements)
+            || elements.ValueKind != JsonValueKind.Array)
+        {
+            return fileIds;
+        }
+
+        foreach (var element in elements.EnumerateArray())
+        {
+            if (element.ValueKind != JsonValueKind.Object
+                || !element.TryGetProperty("type", out var type)
+                || type.ValueKind != JsonValueKind.String
+                || type.GetString() != "image"
+                || element.TryGetProperty("isDeleted", out var deleted) && deleted.ValueKind == JsonValueKind.True
+                || !element.TryGetProperty("fileId", out var fileId)
+                || fileId.ValueKind != JsonValueKind.String)
+            {
+                continue;
+            }
+
+            if (fileId.GetString() is { Length: > 0 } id)
+            {
+                fileIds.Add(id);
+            }
+        }
+
+        return fileIds;
     }
 
     public Task<long> SaveSceneAsync(
@@ -1201,11 +1284,11 @@ public sealed class PinboardDocument
 
     private static byte[] EncodeScene(string sceneJson)
     {
-        var utf8 = Encoding.UTF8.GetBytes(sceneJson);
         using var output = new MemoryStream();
         using (var compressor = new BrotliStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+        using (var writer = new StreamWriter(compressor, new UTF8Encoding(false), bufferSize: 16 * 1024))
         {
-            compressor.Write(utf8, 0, utf8.Length);
+            writer.Write(sceneJson);
         }
         return output.ToArray();
     }
@@ -1218,9 +1301,8 @@ public sealed class PinboardDocument
             {
                 using var input = new MemoryStream(data, writable: false);
                 using var decompressor = new BrotliStream(input, CompressionMode.Decompress);
-                using var output = new MemoryStream();
-                decompressor.CopyTo(output);
-                return Encoding.UTF8.GetString(output.ToArray());
+                using var reader = new StreamReader(decompressor, Encoding.UTF8, detectEncodingFromByteOrderMarks: false, bufferSize: 16 * 1024);
+                return reader.ReadToEnd();
             }
             if (string.Equals(encoding, "utf8", StringComparison.Ordinal))
             {

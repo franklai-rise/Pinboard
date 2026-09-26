@@ -63,11 +63,7 @@ jobs:
 
       - name: Stage portable package
         shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Path artifacts/portable -Force | Out-Null
-          Copy-Item artifacts/publish/Pinboard.exe artifacts/portable/Pinboard.exe
-          Copy-Item README.md, LICENSE, THIRD-PARTY-NOTICES.txt artifacts/portable/
-          Copy-Item docs/*.md artifacts/portable/
+        run: ./scripts/stage-portable.ps1
 
       - name: Upload portable package
         uses: actions/upload-artifact@v7

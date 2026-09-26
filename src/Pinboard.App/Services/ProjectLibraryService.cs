@@ -26,7 +26,8 @@ public sealed class ProjectLibraryService
             .Select(Path.GetFileName)
             .Where(name => !string.IsNullOrWhiteSpace(name)
                 && !name.Equals(ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase)
-                && !name.Equals(AppSettings.TextClipsDirectoryName, StringComparison.CurrentCultureIgnoreCase))
+                && !name.Equals(AppSettings.TextClipsDirectoryName, StringComparison.CurrentCultureIgnoreCase)
+                && !name.Equals(AppSettings.ScreenshotsDirectoryName, StringComparison.CurrentCultureIgnoreCase))
             .Cast<string>()
             .OrderBy(name => name, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
@@ -148,7 +149,8 @@ public sealed class ProjectLibraryService
         if (projectName.Equals(DefaultProjectName, StringComparison.CurrentCultureIgnoreCase)
             || projectName.Equals(OtherLocationProjectName, StringComparison.CurrentCultureIgnoreCase)
             || projectName.Equals(ArchiveProjectName, StringComparison.CurrentCultureIgnoreCase)
-            || projectName.Equals(AppSettings.TextClipsDirectoryName, StringComparison.CurrentCultureIgnoreCase))
+            || projectName.Equals(AppSettings.TextClipsDirectoryName, StringComparison.CurrentCultureIgnoreCase)
+            || projectName.Equals(AppSettings.ScreenshotsDirectoryName, StringComparison.CurrentCultureIgnoreCase))
         {
             return LocalizationService.T("ProjectNameReserved");
         }

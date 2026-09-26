@@ -40,15 +40,7 @@ Invoke-Checked "dotnet" @(
 Invoke-Checked "dotnet" @("test", (Join-Path $projectRoot "PinboardApp.sln"), "-c", "Release", "--no-restore")
 Invoke-Checked "dotnet" @("publish", (Join-Path $projectRoot "src\Pinboard.App\Pinboard.App.csproj"), "-c", "Release", "-r", "win-x64", "--self-contained", "true", "-o", $publishRoot)
 
-New-Item -ItemType Directory -Path $portableRoot -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $publishRoot "Pinboard.exe") -Destination (Join-Path $portableRoot "Pinboard.exe") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination (Join-Path $portableRoot "README.md") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "THIRD-PARTY-NOTICES.txt") -Destination (Join-Path $portableRoot "THIRD-PARTY-NOTICES.txt") -Force
-Copy-Item -LiteralPath (Join-Path $projectRoot "LICENSE") -Destination (Join-Path $portableRoot "LICENSE") -Force
-$docsRoot = Join-Path $projectRoot "docs"
-Get-ChildItem -LiteralPath $docsRoot -Filter "*.md" -File | ForEach-Object {
-    Copy-Item -LiteralPath $_.FullName -Destination (Join-Path $portableRoot $_.Name) -Force
-}
+& (Join-Path $PSScriptRoot "stage-portable.ps1") -PublishPath $publishRoot -Destination $portableRoot
 
 $zipPath = Join-Path $projectRoot "artifacts\Pinboard-windows-x64.zip"
 $checksumPath = "$zipPath.sha256"

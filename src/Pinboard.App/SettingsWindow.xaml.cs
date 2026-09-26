@@ -27,7 +27,12 @@ public partial class SettingsWindow : Window
         FixedTargetBox.IsEnabled = !string.IsNullOrWhiteSpace(activeDocumentPath);
         TextCaptureBox.IsChecked = settings.TextCaptureEnabled;
         PauseTextCaptureBox.IsChecked = settings.TextCapturePaused;
-        TextCaptureBoardModeBox.SelectedIndex = settings.TextCaptureBoardMode == TextCaptureBoardMode.Monthly ? 0 : 1;
+        TextCaptureBoardModeBox.SelectedIndex = settings.TextCaptureBoardMode switch
+        {
+            TextCaptureBoardMode.Daily => 0,
+            TextCaptureBoardMode.Monthly => 1,
+            _ => 2
+        };
         TextPrivacyModeBox.IsChecked = settings.TextPrivacyModeEnabled;
         ExcludedAppsBox.Text = string.Join("; ", settings.TextCaptureExcludedApplications);
         PrivacyMigrationNotice.Visibility = settings.TextPrivacyReviewPending
@@ -48,6 +53,18 @@ public partial class SettingsWindow : Window
         {
             LibraryBox.Text = dialog.SelectedPath;
         }
+    }
+
+    private void OpenLibraryButton_Click(object sender, RoutedEventArgs e)
+    {
+        var path = Directory.Exists(LibraryBox.Text) ? LibraryBox.Text : _settings.LibraryPath;
+        Directory.CreateDirectory(path);
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = "explorer.exe",
+            Arguments = $"\"{path}\"",
+            UseShellExecute = true
+        });
     }
 
     private void QualitySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) => UpdateQualityText();
@@ -90,9 +107,12 @@ public partial class SettingsWindow : Window
             _settings.FixedCaptureTarget = FixedTargetBox.IsChecked == true ? _activeDocumentPath : null;
             _settings.TextCaptureEnabled = TextCaptureBox.IsChecked == true;
             _settings.TextCapturePaused = PauseTextCaptureBox.IsChecked == true;
-            _settings.TextCaptureBoardMode = TextCaptureBoardModeBox.SelectedIndex == 1
-                ? TextCaptureBoardMode.LegacySingleBoard
-                : TextCaptureBoardMode.Monthly;
+            _settings.TextCaptureBoardMode = TextCaptureBoardModeBox.SelectedIndex switch
+            {
+                1 => TextCaptureBoardMode.Monthly,
+                2 => TextCaptureBoardMode.LegacySingleBoard,
+                _ => TextCaptureBoardMode.Daily
+            };
             _settings.TextPrivacyModeEnabled = TextPrivacyModeBox.IsChecked == true;
             _settings.TextCaptureExcludedApplications = AppSettings.NormalizeApplicationNames(
                 ExcludedAppsBox.Text.Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));

@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Excalidraw,
+  MainMenu,
+  WelcomeScreen,
   exportToBlob,
   exportToSvg,
+  getCommonBounds,
   hashElementsVersion,
   restoreAppState,
   restoreElements,
@@ -11,6 +14,7 @@ import {
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { postToHost, subscribeToHost } from "./bridge";
+import { bottomViewport, readViewport, reloadViewport, type CanvasViewport } from "./canvasNavigation";
 import {
   collectReferencedFileIds,
   createSaveId,
@@ -35,6 +39,7 @@ type OpenPayload = {
   sceneJson: string;
   files: HostAsset[];
   revision: number;
+  viewport?: CanvasViewport;
 };
 
 type FlushWaiter = {
@@ -58,10 +63,12 @@ function persistedSceneToken(elements: readonly ExcalidrawElement[], appState: A
 
 export default function App() {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  const [canvasKey, setCanvasKey] = useState(0);
   const [documentPath, setDocumentPath] = useState("");
   const [documentTitle, setDocumentTitle] = useState("");
   const [language, setLanguage] = useState<"en" | "zh-CN">("en");
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [hasContent, setHasContent] = useState(false);
   const [externalMutationBlocking, setExternalMutationBlocking] = useState(false);
   const [saveStatus, setSaveStatus] = useState<SaveUiStatus>("saved");
   const [saveError, setSaveError] = useState("");
@@ -74,6 +81,10 @@ export default function App() {
   const maxSaveTimer = useRef<number | null>(null);
   const flushWaiters = useRef<FlushWaiter[]>([]);
   const deferredOpen = useRef<OpenPayload | null>(null);
+  const pendingCanvasOpen = useRef<OpenPayload | null>(null);
+  const mountedDocument = useRef("");
+  const readySent = useRef(false);
+  const renderGeneration = useRef(0);
   const lastPersistedSceneToken = useRef("");
   const lastState = useRef<{
     elements: readonly ExcalidrawElement[];
@@ -94,7 +105,7 @@ export default function App() {
       postToHost(
         succeeded ? "FlushResult" : "FlushFailed",
         succeeded
-          ? { revision: saveProtocol.current.currentRevision }
+          ? { revision: saveProtocol.current.currentRevision, viewport: readViewport(lastState.current?.appState) }
           : { reason: reason ?? "save-failed" },
         waiter.documentId,
         waiter.requestId
@@ -123,7 +134,23 @@ export default function App() {
   }, []);
 
   const applyOpenDocument = useCallback((payload: OpenPayload) => {
-    if (!api) return false;
+    if (!api) {
+      pendingCanvasOpen.current = payload;
+      return false;
+    }
+    const sameDocument = mountedDocument.current === payload.path;
+    if (mountedDocument.current && !sameDocument) {
+      // resetScene leaves Excalidraw's binary files and decoded image cache alive.
+      // A keyed remount releases the previous board before loading another one.
+      pendingCanvasOpen.current = payload;
+      mountedDocument.current = "";
+      loadingRef.current = true;
+      setLoading(true);
+      lastState.current = null;
+      setApi(null);
+      setCanvasKey((value) => value + 1);
+      return true;
+    }
     const revision = Number.isSafeInteger(payload.revision) ? payload.revision : 0;
     if (!saveProtocol.current.openDocument(payload.path, revision, payload.files.map((file) => file.fileId))) {
       return false;
@@ -134,7 +161,7 @@ export default function App() {
 
     clearSaveTimers();
     loadingRef.current = true;
-    setLoading(true);
+    setLoading(!sameDocument);
     setSaveStatus("saved");
     setSaveError("");
     lastState.current = null;
@@ -142,28 +169,38 @@ export default function App() {
     setDocumentPath(payload.path);
     setDocumentTitle(payload.title);
     setLanguage(payload.language === "zh-CN" ? "zh-CN" : "en");
+    const preservedViewport = reloadViewport(sameDocument, api.getAppState(), payload.viewport);
 
     const scene = JSON.parse(payload.sceneJson);
     const elements = restoreElements(scene.elements ?? [], null);
     const appState = restoreAppState(scene.appState ?? {}, null);
-    const binaryFiles = {} as BinaryFiles;
+    const currentFiles = api.getFiles();
+    const addedFiles = [];
     for (const file of payload.files) {
-      (binaryFiles as Record<string, unknown>)[file.fileId] = {
+      if (currentFiles[file.fileId]) continue;
+      addedFiles.push({
         id: file.fileId,
         dataURL: file.dataUrl,
         mimeType: file.mimeType,
         created: file.createdAt,
         lastRetrieved: file.createdAt
-      };
+      });
     }
 
-    api.resetScene();
-    api.addFiles(Object.values(binaryFiles));
-    api.updateScene({ elements, appState, collaborators: new Map() });
+    if (addedFiles.length) api.addFiles(addedFiles as Parameters<typeof api.addFiles>[0]);
+    api.updateScene({
+      elements,
+      appState: { ...appState, ...preservedViewport, showWelcomeScreen: false } as typeof appState,
+      collaborators: new Map()
+    });
+    mountedDocument.current = payload.path;
     const restoredAppState = api.getAppState();
-    lastState.current = { elements, appState: restoredAppState, files: binaryFiles };
+    lastState.current = { elements, appState: restoredAppState, files: api.getFiles() };
     lastPersistedSceneToken.current = persistedSceneToken(elements, restoredAppState);
+    setHasContent(elements.some((element) => !element.isDeleted));
+    const generation = ++renderGeneration.current;
     window.setTimeout(() => {
+      if (generation !== renderGeneration.current) return;
       loadingRef.current = false;
       setLoading(false);
       postToHost("DocumentRendered", { path: payload.path, revision }, payload.path);
@@ -246,7 +283,10 @@ export default function App() {
   }, [flush]);
 
   const openDocument = useCallback((payload: OpenPayload) => {
-    if (!api) return;
+    if (!api) {
+      pendingCanvasOpen.current = payload;
+      return;
+    }
     const currentPath = saveProtocol.current.activeDocumentId;
     if (
       currentPath &&
@@ -294,8 +334,29 @@ export default function App() {
     sendCurrentScene();
   }, [clearSaveTimers, completeExternalMutationReady, sendCurrentScene]);
 
-  useEffect(() => {
+  const focusBottom = useCallback(() => {
     if (!api) return;
+    const elements = api.getSceneElements().filter((element) => !element.isDeleted);
+    const elementsMap = new Map(elements.map((element) => [element.id, element]));
+    const viewport = bottomViewport(
+      elements.map((element) => getCommonBounds([element], elementsMap)),
+      api.getAppState(),
+    );
+    if (viewport) api.updateScene({ appState: viewport });
+  }, [api]);
+
+  useEffect(() => {
+    if (!api) {
+      // Keep accepting host opens while a different board's canvas remounts.
+      // The latest authoritative payload is applied as soon as its API is ready.
+      return subscribeToHost((message) => {
+        if (message.type === "OpenDocument") pendingCanvasOpen.current = message.payload as OpenPayload;
+        if (message.type === "SetLanguage") {
+          const payload = message.payload as { language?: string };
+          setLanguage(payload.language === "zh-CN" ? "zh-CN" : "en");
+        }
+      });
+    }
     const unsubscribe = subscribeToHost((message) => {
       if (message.type === "OpenDocument") openDocument(message.payload as OpenPayload);
       if (message.type === "SaveAck") {
@@ -338,8 +399,11 @@ export default function App() {
       }
       if (message.type === "CloseDocument") {
         clearSaveTimers();
+        renderGeneration.current++;
         flushWaiters.current = [];
         deferredOpen.current = null;
+        pendingCanvasOpen.current = null;
+        mountedDocument.current = "";
         externalMutation.current.reset();
         setExternalMutationBlocking(false);
         loadingRef.current = true;
@@ -351,20 +415,10 @@ export default function App() {
         setDocumentTitle("");
         setSaveStatus("saved");
         setSaveError("");
-        api.resetScene();
-        api.updateScene({
-          elements: [],
-          appState: {
-            ...api.getAppState(),
-            selectedElementIds: {},
-            viewBackgroundColor: "#ffffff"
-          },
-          collaborators: new Map()
-        });
-        window.setTimeout(() => {
-          loadingRef.current = false;
-          setLoading(false);
-        }, 0);
+        setHasContent(false);
+        setLoading(false);
+        setApi(null);
+        setCanvasKey((value) => value + 1);
       }
       if (message.type === "FocusElement") {
         const payload = message.payload as { elementId?: string; x?: number; y?: number };
@@ -383,6 +437,9 @@ export default function App() {
             }
           });
         }
+      }
+      if (message.type === "FocusBottom") {
+        focusBottom();
       }
       if (message.type === "Flush") flush(message.requestId, message.documentId);
       if (message.type === "BeginExternalMutation") {
@@ -440,9 +497,19 @@ export default function App() {
         })();
       }
     });
-    postToHost("Ready");
+    const pending = pendingCanvasOpen.current;
+    pendingCanvasOpen.current = null;
+    if (pending) applyOpenDocument(pending);
+    if (!readySent.current) {
+      readySent.current = true;
+      postToHost("Ready");
+    }
     return unsubscribe;
-  }, [api, beginExternalMutation, clearSaveTimers, completeFlushWaiters, failExternalMutation, finishSuccessfulSaveCycle, flush, openDocument]);
+  }, [api, applyOpenDocument, beginExternalMutation, clearSaveTimers, completeFlushWaiters, failExternalMutation, finishSuccessfulSaveCycle, flush, focusBottom, openDocument]);
+
+  useEffect(() => {
+    postToHost("SaveStatus", { status: saveStatus, hasContent }, documentPath || undefined);
+  }, [documentPath, hasContent, saveStatus]);
 
   useEffect(() => () => clearSaveTimers(), [clearSaveTimers]);
 
@@ -457,6 +524,7 @@ export default function App() {
         currentItemStrokeColor: "#1b1b1f",
         currentItemStrokeWidth: 2,
         currentItemRoughness: 0,
+        showWelcomeScreen: false,
         currentItemStartArrowhead: null,
         currentItemEndArrowhead: "arrow"
       }
@@ -496,7 +564,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {documentPath && saveStatus !== "saved" && (
+      {documentPath && (saveStatus === "failed" || saveStatus === "conflict") && (
         <div className={`save-status save-status--${saveStatus}`} role="status" title={saveError}>
           <span className="save-status__dot" aria-hidden="true" />
           <span>{statusText}</span>
@@ -508,6 +576,7 @@ export default function App() {
         </div>
       )}
       <Excalidraw
+        key={canvasKey}
         excalidrawAPI={setApi}
         initialData={initialData as never}
         langCode={language}
@@ -515,8 +584,11 @@ export default function App() {
         name={documentTitle || documentPath || "Pinboard"}
         detectScroll={false}
         handleKeyboardGlobally
+        viewModeEnabled={!documentPath}
+        aiEnabled={false}
         onChange={(elements, appState, files) => {
           lastState.current = { elements, appState, files };
+          setHasContent(elements.some((element) => !element.isDeleted));
           const nextToken = persistedSceneToken(elements, appState);
           if (nextToken === lastPersistedSceneToken.current) return;
           lastPersistedSceneToken.current = nextToken;
@@ -531,7 +603,34 @@ export default function App() {
             export: false
           }
         }}
-      />
+      >
+        <WelcomeScreen />
+        <MainMenu>
+          <MainMenu.DefaultItems.SearchMenu />
+          <MainMenu.DefaultItems.CommandPalette />
+          <MainMenu.Separator />
+          <MainMenu.DefaultItems.ChangeCanvasBackground />
+          <MainMenu.DefaultItems.Help />
+        </MainMenu>
+      </Excalidraw>
+      {!documentPath && !loading && (
+        <div className="empty-board" aria-live="polite">
+          <svg width="44" height="44" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="5" y="4" width="14" height="16" rx="3" stroke="currentColor" strokeWidth="1.25" />
+            <path d="M9 9h6M9 13h4" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+          </svg>
+          <strong>{language === "zh-CN" ? "留住值得保存的内容" : "Keep what matters"}</strong>
+          <span>{language === "zh-CN" ? "从侧栏打开画板，或复制内容开始收集。" : "Open a board from the sidebar, or copy something to collect it."}</span>
+        </div>
+      )}
+      <button className="bottom-button" type="button" onClick={focusBottom}
+        disabled={!documentPath || !hasContent || loading || externalMutationBlocking}
+        title={language === "zh-CN" ? "一键到底 · 保持当前缩放" : "Go to bottom · Keep current zoom"}
+        aria-label={language === "zh-CN" ? "跳到画板最下方内容" : "Go to the lowest content on the board"}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 4v11m-4-4 4 4 4-4M5 20h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
     </main>
   );
 }

@@ -41,6 +41,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
+          [xml]$project = Get-Content src/Pinboard.App/Pinboard.App.csproj
+          $version = @($project.Project.PropertyGroup.Version | Where-Object { $_ })[0]
+          if ($env:RELEASE_TAG -ne "v$version") {
+            throw "Release tag does not match the application version."
+          }
+          $notesPath = "docs/releases/$env:RELEASE_TAG.md"
+          $notesArguments = if (Test-Path -LiteralPath $notesPath) { @("--notes-file", $notesPath) } else { @("--generate-notes") }
           $assets = @(
             "artifacts/Pinboard-windows-x64.zip",
             "artifacts/Pinboard-windows-x64.zip.sha256"
@@ -50,9 +57,13 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $env:RELEASE_TAG already exists; updating its assets."
             gh release upload "$env:RELEASE_TAG" @assets --clobber
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+            if (Test-Path -LiteralPath $notesPath) {
+              gh release edit "$env:RELEASE_TAG" --title "Pinboard $env:RELEASE_TAG" --notes-file $notesPath
+            }
           }
           else {
-            gh release create "$env:RELEASE_TAG" @assets --verify-tag --generate-notes
+            gh release create "$env:RELEASE_TAG" @assets --verify-tag --title "Pinboard $env:RELEASE_TAG" @notesArguments
           }
 
           if ($LASTEXITCODE -ne 0) {

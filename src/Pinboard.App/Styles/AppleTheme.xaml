@@ -12,7 +12,7 @@
   <SolidColorBrush x:Key="SecondaryLabelBrush" Color="#6E6E73" />
   <SolidColorBrush x:Key="TertiaryLabelBrush" Color="#8E8E93" />
   <SolidColorBrush x:Key="SeparatorBrush" Color="#D8D8DC" />
-  <SolidColorBrush x:Key="SoftSeparatorBrush" Color="#E8E8ED" />
+  <SolidColorBrush x:Key="SoftSeparatorBrush" Color="#E9E9ED" />
   <SolidColorBrush x:Key="AccentBrush" Color="#007AFF" />
   <SolidColorBrush x:Key="AccentHoverBrush" Color="#006EE6" />
   <SolidColorBrush x:Key="AccentSoftBrush" Color="#E8F2FF" />
@@ -106,7 +106,7 @@
           </Border>
           <ControlTemplate.Triggers>
             <Trigger Property="IsMouseOver" Value="True">
-              <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.86" />
+              <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.80" />
             </Trigger>
             <Trigger Property="IsPressed" Value="True">
               <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.68" />
@@ -235,11 +235,14 @@
                 </ControlTemplate>
               </ToggleButton.Template>
             </ToggleButton>
-            <ContentPresenter Margin="{TemplateBinding Padding}"
+            <ContentPresenter x:Name="SelectionPresenter" Margin="{TemplateBinding Padding}"
                               VerticalAlignment="Center"
                               IsHitTestVisible="False"
                               Content="{TemplateBinding SelectionBoxItem}"
                               ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" />
+            <TextBox x:Name="PART_EditableTextBox" Visibility="Hidden" Margin="9,1,30,1"
+                     Height="Auto" Background="Transparent" BorderThickness="0" Padding="0"
+                     VerticalContentAlignment="Center" Focusable="True" IsReadOnly="{TemplateBinding IsReadOnly}" />
             <Path HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,13,0"
                   Data="M 0 0 L 4 4 L 8 0" Stroke="{StaticResource SecondaryLabelBrush}"
                   StrokeThickness="1.5" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
@@ -258,6 +261,10 @@
             </Popup>
           </Grid>
           <ControlTemplate.Triggers>
+            <Trigger Property="IsEditable" Value="True">
+              <Setter TargetName="SelectionPresenter" Property="Visibility" Value="Hidden" />
+              <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible" />
+            </Trigger>
             <Trigger Property="IsKeyboardFocusWithin" Value="True">
               <Setter TargetName="ComboBorder" Property="BorderBrush" Value="{StaticResource AccentBrush}" />
               <Setter TargetName="ComboBorder" Property="BorderThickness" Value="2" />
@@ -350,6 +357,34 @@
     <Setter Property="Padding" Value="9,6" />
     <Setter Property="BorderThickness" Value="0" />
     <Setter Property="FontSize" Value="11.5" />
+  </Style>
+
+  <Style TargetType="Expander">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Template"><Setter.Value>
+      <ControlTemplate TargetType="Expander">
+        <StackPanel>
+          <DockPanel Margin="2,0,0,5">
+            <ToggleButton x:Name="ChevronToggle" DockPanel.Dock="Left" Width="19" Height="24"
+                          IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"
+                          AutomationProperties.Name="Expand group" Background="Transparent" BorderThickness="0">
+              <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+                <Border Background="Transparent">
+                  <Path x:Name="Chevron" Data="M0,0 L4,4 L0,8" Stroke="#9298A1" StrokeThickness="1.4"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" RenderTransformOrigin=".5,.5">
+                    <Path.RenderTransform><RotateTransform Angle="0" /></Path.RenderTransform>
+                  </Path>
+                </Border>
+                <ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Chevron" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90" /></Setter.Value></Setter></Trigger></ControlTemplate.Triggers>
+              </ControlTemplate></ToggleButton.Template>
+            </ToggleButton>
+            <ContentPresenter ContentSource="Header" VerticalAlignment="Center" />
+          </DockPanel>
+          <ContentPresenter x:Name="GroupContent" Visibility="Collapsed" />
+        </StackPanel>
+        <ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="GroupContent" Property="Visibility" Value="Visible" /></Trigger></ControlTemplate.Triggers>
+      </ControlTemplate>
+    </Setter.Value></Setter>
   </Style>
 
   <Style TargetType="ContextMenu">

@@ -10,7 +10,8 @@ $findings = [System.Collections.Generic.List[string]]::new()
 
 Push-Location $projectRoot
 try {
-    $trackedFiles = & git ls-files --cached --others --exclude-standard
+    # Keep Unicode filenames literal; Git's quoted form is not a filesystem path.
+    $trackedFiles = & git -c core.quotepath=false ls-files --cached --others --exclude-standard
     if ($LASTEXITCODE -ne 0) {
         throw "git ls-files failed with exit code $LASTEXITCODE."
     }

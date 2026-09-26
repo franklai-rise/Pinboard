@@ -1,17 +1,20 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Pinboard.App.Services;
 
 namespace Pinboard.App.Models;
 
 public sealed class AppSettings
 {
-    public const int CurrentSettingsSchemaVersion = 3;
+    public const int CurrentSettingsSchemaVersion = 4;
     public const string TextClipsBoardFileName = "Text Clips.pinboard";
     public const string TextClipsDirectoryName = "Text Clips";
+    public const string ScreenshotsDirectoryName = "Screenshots";
 
     public int SettingsSchemaVersion { get; set; } = CurrentSettingsSchemaVersion;
     public string LibraryPath { get; set; } = DefaultLibraryPath;
     public string? FixedCaptureTarget { get; set; }
+    public string? FixedTextCaptureTarget { get; set; }
     public int WebpQuality { get; set; } = 80;
     public bool OcrChinese { get; set; } = true;
     public bool OcrEnglish { get; set; } = true;
@@ -33,6 +36,9 @@ public sealed class AppSettings
     public bool AlwaysOnTop { get; set; }
     public string Language { get; set; } = LocalizationService.English;
     public List<string> RecentFiles { get; set; } = [];
+    // Tests and portable diagnostics can persist isolated preferences without touching the user's profile.
+    [JsonIgnore]
+    public string StoragePath { get; set; } = SettingsPath;
 
     public static string SettingsDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Pinboard");
@@ -130,11 +136,11 @@ public sealed class AppSettings
     {
         SettingsSchemaVersion = CurrentSettingsSchemaVersion;
         TextCaptureExcludedApplications = NormalizeApplicationNames(TextCaptureExcludedApplications);
-        Directory.CreateDirectory(SettingsDirectory);
+        Directory.CreateDirectory(Path.GetDirectoryName(StoragePath)!);
         var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-        var temp = SettingsPath + ".tmp";
+        var temp = StoragePath + ".tmp";
         File.WriteAllText(temp, json);
-        File.Move(temp, SettingsPath, true);
+        File.Move(temp, StoragePath, true);
     }
 
     public static List<string> CreateDefaultExcludedApplications() =>
@@ -187,12 +193,18 @@ public sealed class AppSettings
             return Path.GetFullPath(FixedCaptureTarget);
         }
 
-        Directory.CreateDirectory(LibraryPath);
-        return Path.Combine(LibraryPath, $"{now:yyyy-MM}.pinboard");
+        var directory = Path.Combine(LibraryPath, ScreenshotsDirectoryName);
+        Directory.CreateDirectory(directory);
+        return Path.Combine(directory, $"{now:yyyy-MM-dd}.pinboard");
     }
 
     public string ResolveTextCaptureTarget(DateTimeOffset now)
     {
+        if (!string.IsNullOrWhiteSpace(FixedTextCaptureTarget))
+        {
+            return Path.GetFullPath(FixedTextCaptureTarget);
+        }
+
         Directory.CreateDirectory(LibraryPath);
         if (TextCaptureBoardMode == TextCaptureBoardMode.LegacySingleBoard)
         {
@@ -201,7 +213,9 @@ public sealed class AppSettings
 
         var directory = Path.Combine(LibraryPath, TextClipsDirectoryName);
         Directory.CreateDirectory(directory);
-        return Path.Combine(directory, $"{now:yyyy-MM}.pinboard");
+        return Path.Combine(directory, TextCaptureBoardMode == TextCaptureBoardMode.Daily
+            ? $"{now:yyyy-MM-dd}.pinboard"
+            : $"{now:yyyy-MM}.pinboard");
     }
 
     public string ResolveTextCaptureTarget() => ResolveTextCaptureTarget(DateTimeOffset.Now);
