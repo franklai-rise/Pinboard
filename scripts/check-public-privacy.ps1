@@ -4,7 +4,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 $self = "scripts/check-public-privacy.ps1"
 $extensions = @(
     ".cs", ".csproj", ".json", ".md", ".ps1", ".ts", ".tsx",
-    ".xaml", ".xml", ".yml", ".yaml"
+    ".xaml", ".xml", ".yml", ".yaml", ".html", ".css", ".js", ".mjs"
 )
 $findings = [System.Collections.Generic.List[string]]::new()
 

@@ -10,7 +10,7 @@ A local-first Windows workspace for screenshots, copied text, and the ideas you 
 
 **English** · [简体中文](README.zh-CN.md)
 
-[Download for Windows](https://github.com/franklai-rise/Pinboard/releases/latest) · [What's new in 0.7.3](docs/releases/v0.7.3.md) · [MIT License](LICENSE)
+[Website & interactive demo](https://franklai.com/Pinboard/) · [Download for Windows](https://github.com/franklai-rise/Pinboard/releases/latest) · [What's new in 0.7.3](docs/releases/v0.7.3.md) · [MIT License](LICENSE)
 
 ![Pinboard screenshot canvas with two demonstration images and a project sidebar](docs/images/screenshot-inbox.png)
 

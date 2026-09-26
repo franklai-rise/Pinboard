@@ -10,7 +10,7 @@
 
 [English](README.md) · **简体中文**
 
-[下载 Windows 版](https://github.com/franklai-rise/Pinboard/releases/latest) · [0.7.3 更新说明](docs/releases/v0.7.3.md) · [MIT 许可证](LICENSE)
+[官网与交互演示](https://franklai.com/Pinboard/) · [下载 Windows 版](https://github.com/franklai-rise/Pinboard/releases/latest) · [0.7.3 更新说明](docs/releases/v0.7.3.md) · [MIT 许可证](LICENSE)
 
 ![截图画板：两张演示图片与左侧项目分组](docs/images/screenshot-inbox.png)
 
