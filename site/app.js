@@ -12,6 +12,8 @@ Object.assign(messages.zh,{
 Object.assign(messages.en,{
   addShot:"Simulate a screenshot",addText:"Simulate copied text",resetDemo:"Reset demo",demoDate:"Today · Sample board",demoOnly:"WEB DEMO",demoSidebar:"Sample boards",demoLibrary:"LIBRARY",shots:"Screenshots",texts:"Text clips",demoReceiving:"A fresh home for each day's ideas.",dragHint:"Drag card headers · Edit notes",demoViewport:"Interactive sample canvas; scroll and move the cards",zoomOut:"Zoom out",zoomIn:"Zoom in",goBottom:"Jump to bottom",demoDisclaimer:"Simplified interactive demo · Sample data only. No clipboard access or uploads. Resets on refresh. Card headers support arrow-key movement.",featuresEyebrow:"STAY WITH WHAT YOU'RE DOING",feature1Title:"Found something useful? Keep it.",feature1Body:"Take a PixPin screenshot and finish by copying. It lands on today's board. Opt in to text collection to save each copied passage without interrupting your flow.",keyNote:"Capture, then copy",feature2Title:"When you need it, find it.",feature2Body:"Screenshots and text have separate homes, grouped by date. Search notes and local OCR results across your library to return to that picture or passage.",searchTag:"English & Chinese search · Daily boards",feature3Title:"Make the connections later.",feature3Body:"Move and resize things on an infinite canvas. Add a thought. Draw an arrow. Each board is its own file, so organizing, exporting, and backing up stay in your hands.",screensEyebrow:"THE REAL THING",screensTitle:"A place to collect. Space to think.",clickEnlarge:"Click an image to explore ↗",galleryTabs:"Application screenshots",compact:"Compact window",enlarge:"Enlarge current screenshot",compactAlt:"Pinboard's compact window and jump-to-bottom button",quietEyebrow:"QUIET IN THE BACKGROUND",quietTitle:"Close the canvas.\nKeep collecting.",quietBody:"Hide or minimize the window, and Pinboard confirms saves before releasing the canvas and image caches. Background collection continues. Return to the same reading position when you reopen it.",sleepFact:"About 15 seconds hidden before safely releasing the canvas.",fileUnit:"file",fileFact:"Images, scene, and indexes together in each board.",startEyebrow:"GETTING STARTED",startTitle:"One less “I should have saved that.”",start1Title:"Unzip. Open.",start1Body:"Download the Windows portable build, extract it, and run Pinboard.exe. .NET is included; WebView2 is required.",start2Title:"Capture as usual.",start2Body:"With PixPin running, press Ctrl+Alt+A, select an area, and finish by copying. Cancelling creates no empty cards.",start3Title:"Make collection yours.",start3Body:"Text collection starts off. Enable it in Settings and choose Daily for a new board each day. Right-click a board to fix its receiving destination.",downloadTitle:"Make room for your next good idea.",releaseNotes:"Release notes ↗",checksum:"SHA-256 checksum ↗",requirements:"Windows 10 build 19041 or later · WebView2 Runtime · Currently unsigned",faqTitle:"A few things worth knowing.",faq1q:"Where does my content live? Is it uploaded?",faq1a:"The default library is the Pinboard folder in Windows Documents; change it in Settings. No account, telemetry, or automatic uploads. OCR runs locally. This website has no analytics tracking; demo content lives only in the current page's memory.",faq2q:"Could text collection save a password?",faq2a:"Text collection is off on new installations. When enabled, copied content may include private information. Optional filtering is best-effort, and boards are not encrypted by Pinboard. Pause collection before handling sensitive data, and use appropriate system and disk protection.",faq3q:"Does collection continue after I close the window?",faq3a:"Yes. Closing hides Pinboard to the system tray while enabled collection keeps running. Choose Exit from the tray menu to stop it entirely. Background sign-in startup can be disabled in Settings.",faq4q:"How do I back up or import an existing board?",faq4a:"Use Save a copy for a consistent backup, or copy the .pinboard file when it is not being edited. Import standard Excalidraw and Obsidian Excalidraw; export PNG, SVG, and Excalidraw. Keep your original files.",guide:"Full introduction and usage guide ↗",feedback:"Feedback ↗",largeScreenshot:"Application screenshot viewer",closeImage:"Close screenshot",demoReady:"Demo ready · Try simulating a screenshot or copied text",demoAdded:"Sample added · Drag its header to organize it",demoEdited:"Note updated · Kept only in this page's demo",demoMoved:"Position updated · Arrow keys work too",demoReset:"Demo reset",demoBottom:"At the lowest sample content",demoLimit:"Up to 8 sample cards per board; reset to keep exploring",demoBoardShots:"Screenshots / Today",demoBoardText:"Text clips / Today",demoShotLabel:"Sample screenshot",demoTextLabel:"Sample text",demoDragLabel:"Drag card; arrow keys move, Shift moves faster",demoNoteLabel:"Edit sample note",demoNoteHint:"You can edit this sample text",demoChartTitle:"Small ideas, big picture.",demoChartDescription:"A little room for the good things you discover.",demoChartAlt:"Sample bar chart of ideas collected Monday through Saturday",demoText1:"Keep the useful parts first.\nNot every idea needs an answer right away.",demoText2:"Add a short note beside your references.\nYour next search will bring the thought back.",demoText3:"Start your next reading session here.\nLeave a good question for your future self.",demoShot2:"Let the pieces become a thought.",demoShot3:"A little room for your next idea."
 });
+Object.assign(messages.zh,{demoSearchLabel:"搜索示例画板",demoSearchInput:"搜索所有示例截图与文字",demoSearchButton:"搜索",demoSearchHint:"试试“想法”或“参考”，点击结果回到卡片。",demoSearchPlaceholder:"搜索截图与文字中的关键词",demoSearchCount:"找到 {count} 条示例 · Enter 打开第一条",demoSearchEmpty:"没有找到示例。试试“想法”或“参考”。",demoSearchLocated:"已定位匹配卡片 · 保持当前缩放",demoSearchMatch:"关键词已定位，可以继续编辑备注。"});
+Object.assign(messages.en,{demoSearchLabel:"Search sample boards",demoSearchInput:"Search all sample screenshots and text",demoSearchButton:"Search",demoSearchHint:"Try “idea” or “reference”, then open a result.",demoSearchPlaceholder:"Search screenshots and text clips",demoSearchCount:"{count} sample results · Enter opens the first",demoSearchEmpty:"No sample matches. Try “idea” or “reference”.",demoSearchLocated:"Matched card located · Current zoom preserved",demoSearchMatch:"Match located. You can keep editing the note."});
 let language = "zh";
 try { if(localStorage.getItem("pinboard-site-language") === "en") language = "en"; } catch {}
 function t(key){ return messages[language][key] || messages.en[key] || key; }
@@ -24,8 +26,10 @@ function applyLanguage(){
   document.querySelector("#language").textContent = language === "zh" ? "English" : "中文";
   document.querySelector("#full-guide").href = `https://github.com/franklai-rise/Pinboard/blob/main/${language === "zh" ? "README.zh-CN.md" : "README.md"}`;
   document.querySelector('meta[name="description"]').content=language === "zh" ? "Pinboard：本地优先的 Windows 截图与文字剪藏工作台。PixPin 自动收集、每日画板、无限画布与本机 OCR 搜索。" : "A local-first Windows canvas for PixPin screenshots and text clips. Daily boards, an infinite canvas, and offline OCR search.";
+  document.querySelector("#demo-search-input").placeholder=t("demoSearchPlaceholder");
   renderDemo();
   updateGallery();
+  if(activeSearch)runDemoSearch(false);
 }
 document.querySelector("#language").addEventListener("click",()=>{
   language=language === "zh" ? "en" : "zh";
@@ -33,30 +37,34 @@ document.querySelector("#language").addEventListener("click",()=>{
   applyLanguage();
 });
 const $=selector=>document.querySelector(selector);
-const state={mode:"shots",zoom:1,status:"demoReady",cards:{shots:[],text:[]}};
+const state={mode:"shots",zoom:1,status:"demoReady",cards:{shots:[],text:[]},located:null};
+let activeSearch="";
+let searchResults=[];
 let gallery="shots";
 const galleryItems={shots:{src:"./assets/screenshot-inbox.png",alt:"shotAlt"},text:{src:"./assets/text-library.png",alt:"textAlt"},compact:{src:"./assets/compact-library.png",alt:"compactAlt"}};
 const motion=()=>matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
 function element(tag,className,text){const node=document.createElement(tag);if(className)node.className=className;if(text!==undefined)node.textContent=text;return node;}
 function announce(key){state.status=key;$("#demo-status").textContent=t(key);}
 function newCard(mode,index){return {id:`${mode}-${index}`,index,x:mode==="shots"?34+(index%2)*340:34,y:mode==="shots"?40+Math.floor(index/2)*310+(index%2)*55:35+index*225,width:mode==="shots"?310:570,height:mode==="shots"?246:193,custom:false,content:""};}
-function resetDemo(){state.cards={shots:[newCard("shots",0),newCard("shots",1)],text:[newCard("text",0),newCard("text",1)]};state.mode="shots";state.zoom=1;state.status="demoReset";renderDemo();$("#demo-viewport").scrollTo({top:0,left:0});}
+function resetDemo(){state.cards={shots:[newCard("shots",0),newCard("shots",1)],text:[newCard("text",0),newCard("text",1)]};state.mode="shots";state.zoom=1;state.status="demoReset";state.located=null;activeSearch="";searchResults=[];$("#demo-search-input").value="";$("#demo-search-results").hidden=true;renderDemo();$("#demo-viewport").scrollTo({top:0,left:0});}
 function maxBottom(){return Math.max(0,...state.cards[state.mode].map(card=>card.y+card.height));}
 function resizeStage(){const height=Math.max(800,maxBottom()+90);$("#demo-canvas").style.height=`${height}px`;$("#demo-canvas").style.transform=`scale(${state.zoom})`;$("#demo-stage").style.width=`${1180*state.zoom}px`;$("#demo-stage").style.height=`${height*state.zoom}px`;$("#zoom-level").textContent=`${Math.round(state.zoom*100)}%`;$("#zoom-out").disabled=state.zoom<=.7;$("#zoom-in").disabled=state.zoom>=1.3;}
 function positionCard(card,node){node.style.left=`${card.x}px`;node.style.top=`${card.y}px`;}
-function setMode(mode){state.mode=mode;renderDemo();$("#demo-viewport").scrollTo({top:0,left:0});}
+function setMode(mode){state.mode=mode;state.located=null;renderDemo();$("#demo-viewport").scrollTo({top:0,left:0});}
 function renderDemo(){
   const canvas=$("#demo-canvas");canvas.replaceChildren();
   for(const card of state.cards[state.mode]){
     const mode=state.mode;
     const node=element("article","demo-card");node.style.width=`${card.width}px`;node.style.height=`${card.height}px`;node.dataset.card=card.id;positionCard(card,node);
+    const located=state.located?.id===card.id&&state.located.mode===mode;
+    if(located)node.classList.add("search-located");
     const handle=element("button","card-drag");handle.type="button";handle.setAttribute("aria-label",`${t("demoDragLabel")} · ${card.index+1}`);
     handle.append(element("span","",`${t(mode==="shots"?"demoShotLabel":"demoTextLabel")} ${card.index+1} · 09:${String(41+card.index).padStart(2,"0")}`),element("span","grip","⠿"));node.append(handle);
     if(mode==="shots"){
-      const body=element("div","demo-card-body");body.append(element("h4","",t(["demoChartTitle","demoShot2","demoShot3"][card.index%3])),element("p","",t("demoChartDescription")));
+      const body=element("div","demo-card-body");const title=element("h4","",t(["demoChartTitle","demoShot2","demoShot3"][card.index%3]));const description=element("p","",t("demoChartDescription"));if(located){highlightDemoText(title,state.located.query);highlightDemoText(description,state.located.query);}body.append(title,description);
       const chart=element("div","demo-chart");chart.setAttribute("role","img");chart.setAttribute("aria-label",t("demoChartAlt"));for(const value of [25,42,34,72,59,84]){const bar=element("span");bar.style.height=`${value}%`;chart.append(bar);}body.append(chart,element("p","demo-chart-caption","MON     TUE     WED     THU     FRI     SAT"));node.append(body);
     }else{
-      const note=element("textarea","demo-note");note.value=card.custom?card.content:t(["demoText1","demoText2","demoText3"][card.index%3]);note.maxLength=500;note.setAttribute("aria-label",`${t("demoNoteLabel")} ${card.index+1}`);note.addEventListener("input",()=>{card.content=note.value;card.custom=true;announce("demoEdited");});node.append(note,element("div","card-footer",t("demoNoteHint")));
+      const note=element("textarea","demo-note");note.value=card.custom?card.content:t(["demoText1","demoText2","demoText3"][card.index%3]);note.maxLength=500;note.setAttribute("aria-label",`${t("demoNoteLabel")} ${card.index+1}`);if(located)note.classList.add("search-match");note.addEventListener("input",()=>{card.content=note.value;card.custom=true;announce("demoEdited");if(activeSearch)runDemoSearch(false);});node.append(note,element("div","card-footer",t(located?"demoSearchMatch":"demoNoteHint")));
     }
     let drag;
     handle.addEventListener("pointerdown",event=>{if(event.button!==0)return;handle.focus({preventScroll:true});handle.setPointerCapture(event.pointerId);drag={id:event.pointerId,x:event.clientX,y:event.clientY,cardX:card.x,cardY:card.y};});
@@ -70,14 +78,50 @@ function renderDemo(){
 }
 function addCard(mode){
   if(state.cards[mode].length>=8){announce("demoLimit");return;}
-  const card=newCard(mode,state.cards[mode].length);
+  const card=newCard(mode,state.cards[mode].length);state.located=null;
   card.y=Math.max(card.y,...state.cards[mode].filter(old=>mode==="text"||old.index%2===card.index%2).map(old=>old.y+old.height+35));
   state.cards[mode].push(card);state.mode=mode;state.status="demoAdded";renderDemo();
+  if(activeSearch)runDemoSearch(false);
   const viewport=$("#demo-viewport");viewport.scrollTo({top:Math.max(0,(card.y+card.height)*state.zoom-viewport.clientHeight+65),left:Math.max(0,card.x*state.zoom-25),behavior:motion()});
 }
 $("#add-shot").addEventListener("click",()=>addCard("shots"));$("#add-text").addEventListener("click",()=>addCard("text"));$("#reset-demo").addEventListener("click",resetDemo);$("#board-shots").addEventListener("click",()=>setMode("shots"));$("#board-text").addEventListener("click",()=>setMode("text"));
 $("#zoom-in").addEventListener("click",()=>{state.zoom=Math.min(1.3,Math.round((state.zoom+.1)*10)/10);resizeStage();});$("#zoom-out").addEventListener("click",()=>{state.zoom=Math.max(.7,Math.round((state.zoom-.1)*10)/10);resizeStage();});
 $("#demo-bottom").addEventListener("click",()=>{const viewport=$("#demo-viewport");const card=[...state.cards[state.mode]].sort((a,b)=>(b.y+b.height)-(a.y+a.height))[0];if(!card)return;viewport.scrollTo({top:Math.max(0,maxBottom()*state.zoom-viewport.clientHeight+65),left:Math.max(0,card.x*state.zoom-25),behavior:motion()});announce("demoBottom");});
+// BEGIN SEARCH HELPERS — pure functions also exercised by the focused site test.
+function demoSearchSnippet(text,query,radius=56){
+  const clean=text.replace(/\s+/g," ").trim();
+  const needle=query.replace(/\s+/g," ").trim().toLowerCase();
+  if(!needle)return undefined;
+  const lower=clean.toLowerCase();
+  let term=needle,index=lower.indexOf(term),score=2;
+  if(index<0){term=needle.split(" ").filter(part=>part.length>=2).find(part=>lower.includes(part));if(!term)return undefined;index=lower.indexOf(term);score=1;}
+  const start=Math.max(0,index-radius),end=Math.min(clean.length,index+term.length+radius);
+  return {before:(start?"…":"")+clean.slice(start,index),match:clean.slice(index,index+term.length),after:clean.slice(index+term.length,end)+(end<clean.length?"…":""),term,score};
+}
+// END SEARCH HELPERS
+function cardSearchText(mode,card){return mode==="text"?(card.custom?card.content:t(["demoText1","demoText2","demoText3"][card.index%3])):`${t(["demoChartTitle","demoShot2","demoShot3"][card.index%3])}\n${t("demoChartDescription")}`;}
+function appendSearchSnippet(node,snippet){node.append(document.createTextNode(snippet.before),element("mark","",snippet.match),document.createTextNode(snippet.after));}
+function highlightDemoText(node,query){const snippet=demoSearchSnippet(node.textContent,query,1000);if(!snippet)return;node.replaceChildren();appendSearchSnippet(node,snippet);}
+function runDemoSearch(openFirst=false){
+  activeSearch=$("#demo-search-input").value.trim();
+  const panel=$("#demo-search-results"),list=$("#demo-search-list");list.replaceChildren();panel.hidden=!activeSearch;searchResults=[];
+  if(!activeSearch)return;
+  for(const mode of ["shots","text"])for(const card of state.cards[mode]){const snippet=demoSearchSnippet(cardSearchText(mode,card),activeSearch);if(snippet)searchResults.push({mode,card,snippet});}
+  searchResults.sort((a,b)=>b.snippet.score-a.snippet.score);
+  $("#demo-search-summary").textContent=searchResults.length?t("demoSearchCount").replace("{count}",searchResults.length):t("demoSearchEmpty");
+  for(const result of searchResults){const button=element("button","search-result");button.type="button";button.append(element("span","search-result-kind",`${t(result.mode==="shots"?"demoBoardShots":"demoBoardText")} · ${result.card.index+1}`));const snippet=element("span","search-result-snippet");appendSearchSnippet(snippet,result.snippet);button.append(snippet);button.addEventListener("click",()=>locateDemoSearch(result));button.addEventListener("keydown",event=>{const direction=event.key==="ArrowDown"?1:event.key==="ArrowUp"?-1:0;if(!direction)return;event.preventDefault();const buttons=[...list.children],index=buttons.indexOf(button);buttons[(index+direction+buttons.length)%buttons.length].focus();});list.append(button);}
+  if(openFirst&&searchResults.length)locateDemoSearch(searchResults[0]);
+}
+function locateDemoSearch(result){
+  state.mode=result.mode;state.located={mode:result.mode,id:result.card.id,query:result.snippet.term};renderDemo();
+  const viewport=$("#demo-viewport"),card=result.card;viewport.scrollTo({top:Math.max(0,(card.y+Math.min(85,card.height/2))*state.zoom-viewport.clientHeight/2),left:Math.max(0,(card.x+Math.min(card.width/2,viewport.clientWidth/(2*state.zoom)))*state.zoom-viewport.clientWidth/2),behavior:motion()});
+  const node=$(`[data-card="${card.id}"]`),note=node.querySelector("textarea");
+  if(note){const index=note.value.toLowerCase().indexOf(result.snippet.term);note.focus({preventScroll:true});if(index>=0){note.setSelectionRange(index,index+result.snippet.term.length);note.scrollTop=Math.max(0,(note.value.slice(0,index).split("\n").length-1)*25-30);}}else node.querySelector(".card-drag").focus({preventScroll:true});
+  announce("demoSearchLocated");
+}
+$("#demo-search-button").addEventListener("click",()=>runDemoSearch());
+$("#demo-search-input").addEventListener("input",()=>runDemoSearch());
+$("#demo-search-input").addEventListener("keydown",event=>{if(event.key==="Enter"){event.preventDefault();runDemoSearch(true);}if(event.key==="Escape"){$("#demo-search-input").value="";runDemoSearch();state.located=null;renderDemo();}});
 function updateGallery(){const item=galleryItems[gallery];const img=$("#gallery-image");img.src=item.src;img.dataset.alt=item.alt;img.alt=t(item.alt);for(const button of document.querySelectorAll("[data-gallery]")){const selected=button.dataset.gallery===gallery;button.setAttribute("aria-selected",String(selected));button.tabIndex=selected?0:-1;if(selected)$("#gallery-panel").setAttribute("aria-labelledby",button.id);}$("#large-image").src=item.src;$("#large-image").alt=t(item.alt);}
 const galleryButtons=[...document.querySelectorAll("[data-gallery]")];galleryButtons.forEach((button,index)=>{button.addEventListener("click",()=>{gallery=button.dataset.gallery;updateGallery();});button.addEventListener("keydown",event=>{let next;if(event.key==="ArrowRight")next=(index+1)%3;if(event.key==="ArrowLeft")next=(index+2)%3;if(event.key==="Home")next=0;if(event.key==="End")next=2;if(next!==undefined){event.preventDefault();galleryButtons[next].click();galleryButtons[next].focus();}});});
 const dialog=$("#screenshot-dialog");$("#open-screenshot").addEventListener("click",()=>dialog.showModal());$("#close-screenshot").addEventListener("click",()=>dialog.close());dialog.addEventListener("click",event=>{if(event.target===dialog){const rect=dialog.getBoundingClientRect();if(event.clientX<rect.left||event.clientX>rect.right||event.clientY<rect.top||event.clientY>rect.bottom)dialog.close();}});

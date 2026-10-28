@@ -26,3 +26,7 @@ pixpin-path.txt
 *.pinboard-journal
 *.pinboard-wal
 *.pinboard-shm
+**/AI Sessions/
+**/GoogleDrive/
+client_secret_*.json
+credentials.json

@@ -7,6 +7,8 @@ namespace Pinboard.App;
 
 public partial class SettingsWindow : Window
 {
+    public event Action<Window>? AiSessionsSettingsRequested;
+    private void AiSessionsButton_Click(object sender, RoutedEventArgs e) => AiSessionsSettingsRequested?.Invoke(this);
     private readonly AppSettings _settings;
     private readonly string? _activeDocumentPath;
     private readonly PixPinService _pixPin;

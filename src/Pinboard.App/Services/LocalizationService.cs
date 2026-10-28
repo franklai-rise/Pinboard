@@ -83,7 +83,7 @@ public static class LocalizationService
 
         dictionaries.Insert(0, new ResourceDictionary
         {
-            Source = new Uri($"Resources/Strings.{CurrentLanguage}.xaml", UriKind.Relative)
+            Source = new Uri($"/{typeof(LocalizationService).Assembly.GetName().Name};component/Resources/Strings.{CurrentLanguage}.xaml", UriKind.Relative)
         });
     }
 

@@ -142,6 +142,16 @@ export class SaveProtocol {
     return true;
   }
 
+  /** Host snapshots after a flushed capture contain only newly needed assets. */
+  applyExternalUpdate(documentId: string, revision: number, fileIds: Iterable<string>) {
+    // A delta cannot initialize a different canvas, or discard an edit/save
+    // that has not been acknowledged by the host's mutation barrier.
+    if (documentId !== this.documentId || this.hasUnsavedChanges || this.isSaving) return false;
+    const knownFileIds = new Set(this.acknowledgedFileIds);
+    for (const fileId of fileIds) knownFileIds.add(fileId);
+    return this.openDocument(documentId, revision, knownFileIds);
+  }
+
   closeDocument() {
     this.documentId = "";
     this.revision = 0;

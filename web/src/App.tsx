@@ -14,7 +14,7 @@ import {
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { postToHost, subscribeToHost } from "./bridge";
-import { bottomViewport, readViewport, reloadViewport, type CanvasViewport } from "./canvasNavigation";
+import { bottomViewport, readViewport, reloadViewport, textHitViewport, type CanvasViewport } from "./canvasNavigation";
 import {
   collectReferencedFileIds,
   createSaveId,
@@ -133,7 +133,15 @@ export default function App() {
     setExternalMutationBlocking(false);
   }, []);
 
-  const applyOpenDocument = useCallback((payload: OpenPayload) => {
+  const applyOpenDocument = useCallback((payload: OpenPayload, externalUpdate = false) => {
+    const failDelta = (reason: string, missingFileIds?: string[]) => {
+      postToHost("DocumentRenderFailed", { path: payload.path, revision: payload.revision, reason, missingFileIds }, payload.path);
+      postToHost("RequestFullDocument", { path: payload.path, revision: payload.revision, reason, missingFileIds }, payload.path);
+      return false;
+    };
+    if (externalUpdate && (!api || mountedDocument.current !== payload.path)) {
+      return failDelta("delta-not-active");
+    }
     if (!api) {
       pendingCanvasOpen.current = payload;
       return false;
@@ -152,7 +160,20 @@ export default function App() {
       return true;
     }
     const revision = Number.isSafeInteger(payload.revision) ? payload.revision : 0;
-    if (!saveProtocol.current.openDocument(payload.path, revision, payload.files.map((file) => file.fileId))) {
+    const scene = JSON.parse(payload.sceneJson);
+    const elements = restoreElements(scene.elements ?? [], null);
+    const currentFiles = api.getFiles();
+    const referencedFileIds = collectReferencedFileIds(elements);
+    if (externalUpdate) {
+      const supplied = new Set(payload.files.map(file => file.fileId));
+      const missing = [...referencedFileIds].filter(fileId => !currentFiles[fileId] && !supplied.has(fileId));
+      if (missing.length) return failDelta("missing-assets", missing);
+    }
+    const opened = externalUpdate
+      ? saveProtocol.current.applyExternalUpdate(payload.path, revision, payload.files.map(file => file.fileId))
+      : saveProtocol.current.openDocument(payload.path, revision, payload.files.map(file => file.fileId));
+    if (!opened) {
+      if (externalUpdate) failDelta("delta-not-flushed");
       return false;
     }
 
@@ -171,10 +192,7 @@ export default function App() {
     setLanguage(payload.language === "zh-CN" ? "zh-CN" : "en");
     const preservedViewport = reloadViewport(sameDocument, api.getAppState(), payload.viewport);
 
-    const scene = JSON.parse(payload.sceneJson);
-    const elements = restoreElements(scene.elements ?? [], null);
     const appState = restoreAppState(scene.appState ?? {}, null);
-    const currentFiles = api.getFiles();
     const addedFiles = [];
     for (const file of payload.files) {
       if (currentFiles[file.fileId]) continue;
@@ -203,7 +221,7 @@ export default function App() {
       if (generation !== renderGeneration.current) return;
       loadingRef.current = false;
       setLoading(false);
-      postToHost("DocumentRendered", { path: payload.path, revision }, payload.path);
+      postToHost("DocumentRendered", { path: payload.path, revision, fileIds: [...referencedFileIds].filter(fileId => api.getFiles()[fileId]) }, payload.path);
     }, 0);
     return true;
   }, [api, clearSaveTimers]);
@@ -351,6 +369,11 @@ export default function App() {
       // The latest authoritative payload is applied as soon as its API is ready.
       return subscribeToHost((message) => {
         if (message.type === "OpenDocument") pendingCanvasOpen.current = message.payload as OpenPayload;
+        if (message.type === "ExternalDocumentUpdated") {
+          const payload = message.payload as OpenPayload;
+          postToHost("DocumentRenderFailed", { path: payload.path, revision: payload.revision, reason: "delta-not-active" }, payload.path);
+          postToHost("RequestFullDocument", { path: payload.path, revision: payload.revision, reason: "delta-not-active" }, payload.path);
+        }
         if (message.type === "SetLanguage") {
           const payload = message.payload as { language?: string };
           setLanguage(payload.language === "zh-CN" ? "zh-CN" : "en");
@@ -359,6 +382,7 @@ export default function App() {
     }
     const unsubscribe = subscribeToHost((message) => {
       if (message.type === "OpenDocument") openDocument(message.payload as OpenPayload);
+      if (message.type === "ExternalDocumentUpdated") applyOpenDocument(message.payload as OpenPayload, true);
       if (message.type === "SaveAck") {
         const payload = message.payload as Partial<SaveAckPayload> & { requestId?: string };
         const saveId = payload.saveId ?? payload.requestId ?? message.requestId;
@@ -421,11 +445,16 @@ export default function App() {
         setCanvasKey((value) => value + 1);
       }
       if (message.type === "FocusElement") {
-        const payload = message.payload as { elementId?: string; x?: number; y?: number };
+        const payload = message.payload as { elementId?: string; query?: string; matchIndex?: number; x?: number; y?: number };
         const elements = api.getSceneElements();
-        const target = payload.elementId ? elements.find((item) => item.id === payload.elementId) : undefined;
+        const target = payload.elementId ? elements.find((item) => item.id === payload.elementId && !item.isDeleted) : undefined;
         if (target) {
-          api.scrollToContent(target, { fitToContent: true, animate: true, duration: 350 });
+          if (target.type === "text") {
+            const viewport = textHitViewport(target, api.getAppState(), payload.query, payload.matchIndex);
+            api.updateScene({ appState: { ...viewport, zoom: viewport.zoom as AppState["zoom"] } });
+          } else {
+            api.scrollToContent(target, { fitToContent: true, animate: true, duration: 350 });
+          }
           api.updateScene({ appState: { selectedElementIds: { [target.id]: true } } });
         } else if (typeof payload.x === "number" && typeof payload.y === "number") {
           const appState = api.getAppState();

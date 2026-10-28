@@ -11,9 +11,9 @@
     <ApplicationIcon>Assets\Pinboard.ico</ApplicationIcon>
     <AssemblyName>Pinboard</AssemblyName>
     <RootNamespace>Pinboard.App</RootNamespace>
-    <Version>0.7.3</Version>
+    <Version>0.8.4</Version>
     <Authors>Pinboard contributors</Authors>
-    <Description>Offline screenshot infinite canvas with PixPin delivery.</Description>
+    <Description>Local-first screenshots, text clips, and selected AI session backups.</Description>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>

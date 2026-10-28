@@ -95,6 +95,35 @@ describe("SaveProtocol", () => {
     expect(protocol.openDocument("board.pinboard", 5, [])).toBe(false);
     expect(protocol.hasUnsavedChanges).toBe(true);
   });
+
+  it("merges confirmed cached images with capture deltas without retransmitting old images", () => {
+    const protocol = new SaveProtocol();
+    protocol.openDocument("board.pinboard", 5, ["old"]);
+    protocol.markChanged();
+    protocol.beginSave("before-capture", "{}", [image("old"), image("pasted")]);
+    protocol.acknowledge({ saveId: "before-capture", revision: 6 });
+    expect(protocol.applyExternalUpdate("board.pinboard", 7, ["captured"])).toBe(true);
+    expect(protocol.applyExternalUpdate("board.pinboard", 8, [])).toBe(true);
+
+    protocol.markChanged();
+    const save = protocol.beginSave("after-capture", "{}", [image("old"), image("pasted"), image("captured"), image("new")]);
+    expect(save?.payload.baseRevision).toBe(8);
+    expect(save?.payload.newFiles.map(file => file.id)).toEqual(["new"]);
+  });
+
+  it("rejects stale, wrong-canvas and unflushed deltas without losing pending work", () => {
+    const protocol = new SaveProtocol();
+    protocol.openDocument("board.pinboard", 5, ["old"]);
+    expect(protocol.applyExternalUpdate("other.pinboard", 6, ["other"])).toBe(false);
+    expect(protocol.applyExternalUpdate("board.pinboard", 4, [])).toBe(false);
+    protocol.markChanged();
+    expect(protocol.applyExternalUpdate("board.pinboard", 6, [])).toBe(false);
+    protocol.beginSave("pending", "{}", [image("old"), image("pending-image")]);
+    expect(protocol.applyExternalUpdate("board.pinboard", 6, [])).toBe(false);
+    expect(protocol.isSaving).toBe(true);
+    expect(protocol.hasUnsavedChanges).toBe(true);
+    expect(protocol.currentRevision).toBe(5);
+  });
 });
 
 describe("collectReferencedFileIds", () => {

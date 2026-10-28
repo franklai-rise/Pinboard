@@ -32,6 +32,15 @@ public sealed class AppSettings
     public string? LastImportDirectory { get; set; }
     public bool StartAtLogin { get; set; } = true;
     public bool SidebarCollapsed { get; set; }
+    public bool PreferTextReadingView { get; set; } = true;
+    public string? AiSessionsArchivePath { get; set; }
+    public bool AiSessionsPaused { get; set; }
+    [JsonIgnore]
+    public string? AiSessionsSourceProfilePath { get; set; }
+    public string ResolveAiSessionsArchivePath() => string.IsNullOrWhiteSpace(AiSessionsArchivePath)
+        ? Path.Combine(Path.GetDirectoryName(Path.GetFullPath(LibraryPath))!, "PinboardArchives", "AI Sessions")
+        : Path.GetFullPath(AiSessionsArchivePath);
+    public Dictionary<string, bool> ExpandedSidebarGroups { get; set; } = new(StringComparer.Ordinal);
     // Behave like a normal desktop window unless the user explicitly pins it.
     public bool AlwaysOnTop { get; set; }
     public string Language { get; set; } = LocalizationService.English;
@@ -100,6 +109,7 @@ public sealed class AppSettings
                     settings.LibraryPath = NormalizeLibraryPath(settings.LibraryPath);
                     settings.Language = LocalizationService.Normalize(settings.Language);
                     settings.RecentFiles ??= [];
+                    settings.ExpandedSidebarGroups ??= new(StringComparer.Ordinal);
                     settings.TextCaptureExcludedApplications ??= CreateDefaultExcludedApplications();
                     settings.TextCaptureExcludedApplications = NormalizeApplicationNames(settings.TextCaptureExcludedApplications);
                     settings.PixPinExecutablePath = NormalizeExistingFile(settings.PixPinExecutablePath);
@@ -194,7 +204,6 @@ public sealed class AppSettings
         }
 
         var directory = Path.Combine(LibraryPath, ScreenshotsDirectoryName);
-        Directory.CreateDirectory(directory);
         return Path.Combine(directory, $"{now:yyyy-MM-dd}.pinboard");
     }
 
@@ -205,14 +214,12 @@ public sealed class AppSettings
             return Path.GetFullPath(FixedTextCaptureTarget);
         }
 
-        Directory.CreateDirectory(LibraryPath);
         if (TextCaptureBoardMode == TextCaptureBoardMode.LegacySingleBoard)
         {
             return Path.Combine(LibraryPath, TextClipsBoardFileName);
         }
 
         var directory = Path.Combine(LibraryPath, TextClipsDirectoryName);
-        Directory.CreateDirectory(directory);
         return Path.Combine(directory, TextCaptureBoardMode == TextCaptureBoardMode.Daily
             ? $"{now:yyyy-MM-dd}.pinboard"
             : $"{now:yyyy-MM}.pinboard");

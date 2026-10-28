@@ -70,7 +70,8 @@ public static class SceneBuilder
         AssetRecord asset,
         double x,
         double y,
-        string source)
+        string source,
+        DateTimeOffset? capturedAt = null)
     {
         var root = JsonNode.Parse(sceneJson)?.AsObject()
             ?? throw new InvalidDataException(LocalizationService.T("SceneInvalid"));
@@ -80,7 +81,8 @@ public static class SceneBuilder
         var displayWidth = Math.Min(asset.Width, 1120d);
         var displayHeight = asset.Height * (displayWidth / asset.Width);
         var elementId = $"img-{Guid.NewGuid():N}"[..24];
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var captureTime = capturedAt ?? DateTimeOffset.Now;
+        var now = captureTime.ToUnixTimeMilliseconds();
         elements.Add(new JsonObject
         {
             ["id"] = elementId,
@@ -117,7 +119,7 @@ public static class SceneBuilder
                 ["pinboard"] = new JsonObject
                 {
                     ["role"] = "inbox-item",
-                    ["capturedAt"] = DateTimeOffset.UtcNow.ToString("O"),
+                    ["capturedAt"] = captureTime.ToString("O"),
                     ["source"] = source,
                     ["ocrStatus"] = "pending"
                 }
@@ -134,14 +136,16 @@ public static class SceneBuilder
         string text,
         double x,
         double y,
-        string source)
+        string source,
+        DateTimeOffset? capturedAt = null,
+        ICollection<(string Id, string Text, double X, double Y)>? appendedText = null)
     {
         var root = JsonNode.Parse(sceneJson)?.AsObject()
             ?? throw new InvalidDataException(LocalizationService.T("SceneInvalid"));
         var elements = root["elements"]?.AsArray() ?? new JsonArray();
         root["elements"] = elements;
 
-        var capturedAt = DateTimeOffset.Now;
+        var captureTime = capturedAt ?? DateTimeOffset.Now;
         var originalText = text.Replace("\r\n", "\n").Trim();
         var displayedText = WrapTextForCard(originalText, 70, out var lineCount);
         const double cardWidth = 820;
@@ -150,12 +154,12 @@ public static class SceneBuilder
         const double contentLineHeight = 25;
         var contentHeight = Math.Max(contentLineHeight, lineCount * contentLineHeight);
         var cardHeight = Math.Max(116, 66 + contentHeight + 24);
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var now = captureTime.ToUnixTimeMilliseconds();
         var groupId = $"clip-group-{Guid.NewGuid():N}";
         var cardId = $"clip-card-{Guid.NewGuid():N}"[..24];
         var metaId = $"clip-meta-{Guid.NewGuid():N}"[..24];
         var contentId = $"clip-text-{Guid.NewGuid():N}"[..24];
-        var metadataText = LocalizationService.T("SceneTextClipTimestampFormat", capturedAt.LocalDateTime);
+        var metadataText = LocalizationService.T("SceneTextClipTimestampFormat", captureTime.LocalDateTime);
         var groupIds = new JsonArray(groupId);
 
         elements.Add(new JsonObject
@@ -190,7 +194,7 @@ public static class SceneBuilder
                 ["pinboard"] = new JsonObject
                 {
                     ["role"] = "text-clip-card",
-                    ["capturedAt"] = capturedAt.ToString("O"),
+                    ["capturedAt"] = captureTime.ToString("O"),
                     ["source"] = source
                 }
             }
@@ -228,13 +232,15 @@ public static class SceneBuilder
                 ["pinboard"] = new JsonObject
                 {
                     ["role"] = "text-clip",
-                    ["capturedAt"] = capturedAt.ToString("O"),
+                    ["capturedAt"] = captureTime.ToString("O"),
                     ["source"] = source
                 }
             }));
 
         root["appState"] ??= DefaultAppState();
         root["files"] ??= new JsonObject();
+        appendedText?.Add((metaId, metadataText, x + contentXInset, y + 18));
+        appendedText?.Add((contentId, originalText, x + contentXInset, y + 46));
         return new TextClipInsertResult(contentId, x, y, cardWidth, cardHeight, root.ToJsonString());
     }
 

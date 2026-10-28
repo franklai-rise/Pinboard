@@ -1,12 +1,14 @@
 <Window x:Class="Pinboard.App.SearchWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:Pinboard.App"
         Title="{DynamicResource WindowSearchTitle}"
         Width="820" Height="600"
         MinWidth="680" MinHeight="480"
         WindowStartupLocation="CenterOwner">
   <Grid Margin="26,24,26,20">
     <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
@@ -22,16 +24,26 @@
     <Border Grid.Row="1" Style="{StaticResource Card}" Margin="0,18,0,14" Padding="8">
       <DockPanel>
         <Button DockPanel.Dock="Right" Style="{StaticResource PrimaryButton}"
-                Click="SearchButton_Click" IsDefault="True" MinWidth="78"
+                Click="SearchButton_Click" MinWidth="78"
                 Content="{DynamicResource CommonSearch}" />
         <TextBlock DockPanel.Dock="Left" Text="⌕" FontSize="21" Foreground="{StaticResource TertiaryLabelBrush}"
                    VerticalAlignment="Center" Margin="6,0,8,0" />
         <TextBox x:Name="QueryBox" BorderThickness="0" Background="Transparent"
-                 FontSize="15" Padding="2,0" />
+                 FontSize="15" Padding="2,0" MaxLength="1000" TextChanged="QueryBox_TextChanged"
+                 PreviewKeyDown="QueryBox_PreviewKeyDown" />
       </DockPanel>
     </Border>
 
-    <ListBox x:Name="ResultsList" Grid.Row="2" MouseDoubleClick="ResultsList_MouseDoubleClick">
+    <DockPanel Grid.Row="2" Margin="0,0,0,12">
+      <ComboBox x:Name="OrderSelector" DockPanel.Dock="Right" Width="164" Height="32"
+                SelectionChanged="OrderSelector_SelectionChanged" />
+      <TextBlock x:Name="SearchHint" Style="{StaticResource SecondaryText}"
+                 VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,12,0" />
+    </DockPanel>
+
+    <ListBox x:Name="ResultsList" Grid.Row="3" MouseDoubleClick="ResultsList_MouseDoubleClick"
+             PreviewKeyDown="ResultsList_PreviewKeyDown" VirtualizingPanel.IsVirtualizing="True"
+             VirtualizingPanel.VirtualizationMode="Recycling">
       <ListBox.ItemTemplate>
         <DataTemplate>
           <Grid>
@@ -41,8 +53,9 @@
             </Grid.ColumnDefinitions>
             <Border Grid.Column="0" Background="{StaticResource AccentBrush}" CornerRadius="2" />
             <StackPanel Grid.Column="1" Margin="12,0,0,0">
-              <TextBlock Text="{Binding Header}" FontWeight="SemiBold" />
-              <TextBlock Text="{Binding Snippet}" TextWrapping="Wrap" Margin="0,4,0,0"
+              <TextBlock Text="{Binding Header}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+              <TextBlock Text="{Binding Metadata}" Style="{StaticResource SecondaryText}" Margin="0,3,0,0" />
+              <TextBlock local:SearchHighlight.Excerpt="{Binding Excerpt}" TextWrapping="Wrap" Margin="0,6,0,0"
                          Foreground="{StaticResource SecondaryLabelBrush}" LineHeight="19" />
             </StackPanel>
           </Grid>
@@ -50,7 +63,10 @@
       </ListBox.ItemTemplate>
     </ListBox>
 
-    <Border Grid.Row="3" HorizontalAlignment="Left" Margin="0,10,0,0">
+    <DockPanel Grid.Row="4" Margin="0,10,0,0">
+      <Button x:Name="MoreResultsButton" DockPanel.Dock="Right" Visibility="Collapsed"
+              Click="MoreResultsButton_Click" Margin="12,0,0,0" />
+    <Border HorizontalAlignment="Left" VerticalAlignment="Center">
       <Border.Style>
         <Style TargetType="Border" BasedOn="{StaticResource Pill}">
           <Style.Triggers>
@@ -60,7 +76,8 @@
           </Style.Triggers>
         </Style>
       </Border.Style>
-      <TextBlock x:Name="SearchStatus" Style="{StaticResource SecondaryText}" />
+      <TextBlock x:Name="SearchStatus" Style="{StaticResource SecondaryText}" TextWrapping="Wrap" />
     </Border>
+    </DockPanel>
   </Grid>
 </Window>

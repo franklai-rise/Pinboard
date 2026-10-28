@@ -10,7 +10,7 @@ A local-first Windows workspace for screenshots, copied text, and the ideas you 
 
 **English** · [简体中文](README.zh-CN.md)
 
-[Website & interactive demo](https://franklai.com/Pinboard/) · [Download for Windows](https://github.com/franklai-rise/Pinboard/releases/latest) · [What's new in 0.7.3](docs/releases/v0.7.3.md) · [MIT License](LICENSE)
+[Website & interactive demo](https://franklai.com/Pinboard/) · [Download for Windows](https://github.com/franklai-rise/Pinboard/releases/latest) · [What's new in 0.8.4](docs/releases/v0.8.4.md) · [MIT License](LICENSE)
 
 ![Pinboard screenshot canvas with two demonstration images and a project sidebar](docs/images/screenshot-inbox.png)
 
@@ -21,9 +21,18 @@ A local-first Windows workspace for screenshots, copied text, and the ideas you 
 - **An infinite canvas.** Move and resize images; add text, arrows, shapes, and freehand notes using Excalidraw.
 - **A library that stays organized.** Separate screenshot and text sections, custom projects, text folders, collapsed history, and display names independent of filenames.
 - **Find it again.** Search notes and locally recognized Chinese/English image text across the library, then jump to the result.
+- **Read without loading a canvas.** Text boards have a native reading view with chronological snippets, full text, keyword highlights, local favorites, and optional display-only repeated-clip grouping. Switch to Canvas to edit.
+- **Selected AI session backups.** Browse a native title catalogue for Codex, Claude Code, and Antigravity, with independent child selection, deduplicated local versions, and optional private Google Drive backups. [Setup and recovery guide](docs/ai-sessions.md).
+- **Recover queued work.** Captures and original OCR inputs are journaled locally before processing, resume after restart, and keep their original capture date. An active canvas receives only newly needed images.
 - **One portable file per board.** Images, scene data, and indexes live together in a SQLite `.pinboard` file. Import Excalidraw or Obsidian Excalidraw; export PNG, SVG, or `.excalidraw`.
 
 ## See it in action
+
+### AI session titles and selected backups
+
+Version 0.8.4 includes an independent, virtualized title catalogue. Select conversations individually or use the confirmed **Select all** action, which respects title/source filters and includes matching folded children. A live progress card distinguishes confirmed backups, waiting work, retries, and acknowledged bytes. **View issues** separates missing files from transfer failures, explains recovery actions and supports targeted retry. Read-only **backup health & duplicates** checks distinguish identical content from same-title matches and normal resource sharing. **Deselect all** retains existing backups. Restore a verified local or optional Google Drive version. [Connection guide](docs/ai-sessions.md).
+
+![AI Sessions showing synthetic titles and independent backup selection](docs/images/ai-sessions.png)
 
 ### Text clips with room to breathe
 
@@ -33,7 +42,7 @@ Each copy becomes a separate card, including repeated copies. Use the bottom-rig
 
 ### A compact, focused interface
 
-One top toolbar, contextual row actions, a collapsible sidebar, and a clean blue-and-white visual language. English and Chinese are available from **More ···**.
+One top toolbar, contextual row actions, a collapsible sidebar, and a clean blue-and-white visual language. Sidebar arrows have a hand cursor, a rounded blue hover highlight, press feedback and a short expansion animation. Click the title to expand too; the add button stays independent. English and Chinese are available from **More ···**.
 
 ![Pinboard in a narrower window, showing the bottom navigation button](docs/images/compact-library.png)
 
@@ -70,7 +79,7 @@ The default library is `%USERPROFILE%\Documents\Pinboard`; it can be changed in 
 
 Settings and recovery data stay under `%LocalAppData%\Pinboard`.
 
-- No account, telemetry, cloud upload, or online OCR. The canvas blocks external network requests.
+- Capture and OCR work locally without an account or telemetry. Optional AI-session cloud backups require separate Google authorization and explicit conversation selection; they upload raw records without additional encryption. The canvas blocks external network requests.
 - **Text collection is off on new installations.** Existing explicit settings are preserved.
 - Optional sensitive-data filtering is best-effort, not a guarantee. Clipboard history may contain passwords or private messages; pause collection before handling sensitive material.
 - Board files are **not encrypted by Pinboard**. Use appropriate Windows account and disk protection.
@@ -87,7 +96,7 @@ Use the .NET SDK version targeted by the project, Node.js, and WebView2 on Windo
 
 The script runs privacy checks, frontend tests, dependency audits, .NET tests, and the Windows x64 self-contained build. The portable package is staged in `artifacts\portable`.
 
-0.7.3 was checked with 54 .NET tests, 14 frontend tests, and 14 isolated desktop smoke checks. A large 200 MB board benchmark and a full multi-monitor/high-DPI matrix remain outside this verification.
+See the [0.8.4 release notes](docs/releases/v0.8.4.md) for current validation. A large 200 MB board benchmark and a full multi-monitor/high-DPI matrix remain outside this verification.
 
 [Chinese usage guide](docs/使用说明.md) · [Keyboard shortcuts](docs/快捷键.md) · [Verification notes](docs/验收记录.md)
 

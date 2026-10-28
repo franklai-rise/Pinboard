@@ -55,6 +55,12 @@
         <div class="demo-adds"><button class="button primary" id="add-shot" type="button"><span aria-hidden="true">＋</span><span data-i18n="addShot">模拟截图</span></button><button class="button secondary" id="add-text" type="button"><span aria-hidden="true">＋</span><span data-i18n="addText">模拟复制文字</span></button></div>
         <button class="quiet-button" id="reset-demo" type="button" data-i18n="resetDemo">重置演示</button>
       </div>
+      <div class="demo-search" role="search" aria-label="搜索示例画板" data-label="demoSearchLabel">
+        <label class="search-field" for="demo-search-input"><span aria-hidden="true">⌕</span><input id="demo-search-input" type="search" maxlength="100" autocomplete="off" aria-label="搜索所有示例截图与文字" data-label="demoSearchInput" placeholder="搜索截图与文字中的关键词" aria-describedby="demo-search-hint"></label>
+        <button class="button secondary" id="demo-search-button" type="button" data-i18n="demoSearchButton">搜索</button>
+        <span id="demo-search-hint" data-i18n="demoSearchHint">试试“想法”或“参考”，点击结果回到卡片。</span>
+      </div>
+      <div class="demo-search-results" id="demo-search-results" hidden><p id="demo-search-summary" role="status" aria-live="polite"></p><div id="demo-search-list"></div></div>
       <div class="demo-window" id="demo-window">
         <div class="demo-titlebar"><img src="./assets/pinboard-logo.png" width="23" height="23" alt=""><strong>Pinboard</strong><span class="demo-date" data-i18n="demoDate">今天 · 示例画板</span><span class="demo-local" data-i18n="demoOnly">网页演示</span></div>
         <div class="demo-body">

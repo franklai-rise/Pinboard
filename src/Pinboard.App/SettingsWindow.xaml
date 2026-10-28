@@ -125,6 +125,7 @@
         <Border Grid.Row="8" Style="{StaticResource InsetCard}" Padding="14,10">
           <DockPanel LastChildFill="True">
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+              <Button Click="AiSessionsButton_Click" Content="{DynamicResource AiSessionsTitle}" />
               <Button Click="RepairButton_Click" Content="{DynamicResource SettingsRepairAssociation}" />
               <Button Click="PixPinButton_Click" Content="{DynamicResource SettingsPixPin}" />
             </StackPanel>

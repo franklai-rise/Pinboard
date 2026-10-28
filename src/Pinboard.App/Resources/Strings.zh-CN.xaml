@@ -89,4 +89,5 @@
   <sys:String x:Key="StatusCanvasSleeping">画布已休眠 · 自动收集仍在运行</sys:String>
   <sys:String x:Key="ExitSaveFailed">更改未能保存。Pinboard 将保持打开，请重试保存或保存副本。</sys:String>
   <sys:String x:Key="SidebarProjects">项目</sys:String>
+  <sys:String x:Key="AiSessionsTitle">AI 对话</sys:String>
 </ResourceDictionary>

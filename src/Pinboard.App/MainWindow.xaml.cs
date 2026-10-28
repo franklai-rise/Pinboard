@@ -33,7 +33,6 @@ public partial class MainWindow : Window
     private readonly ObservableCollection<SidebarDocument> _sidebarDocuments = [];
     private readonly Dictionary<string, string> _lastInsertedElements = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TaskCompletionSource<JsonElement>> _pendingCanvasRequests = new(StringComparer.Ordinal);
-    private readonly SemaphoreSlim _ocrGate = new(2, 2);
     private readonly SemaphoreSlim _captureGate = new(1, 1);
     private readonly DispatcherTimer _canvasIdleTimer = new() { Interval = TimeSpan.FromSeconds(15) };
     private readonly DispatcherTimer _sidebarRefreshTimer = new() { Interval = TimeSpan.FromMilliseconds(350) };
@@ -52,6 +51,7 @@ public partial class MainWindow : Window
     private System.Drawing.Icon? _trayIcon;
     private Forms.ToolStripMenuItem? _trayTargetItem;
     private Forms.ToolStripMenuItem? _trayPauseItem;
+    private Forms.ToolStripMenuItem? _trayTextPauseItem;
     private Forms.ToolStripMenuItem? _trayOpenItem;
     private Forms.ToolStripMenuItem? _trayCaptureItem;
     private Forms.ToolStripMenuItem? _trayPixPinItem;
@@ -68,6 +68,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         _settings = settings;
         _startHidden = startHidden;
+        InitializeOptimizations();
         _obsidianImporter = new ObsidianImporter(_imageProcessor, _ocrService);
         _projectLibrary = new ProjectLibraryService(settings.LibraryPath);
         var sidebarView = CollectionViewSource.GetDefaultView(_sidebarDocuments);
@@ -130,6 +131,8 @@ public partial class MainWindow : Window
         }
 
         InitializeTray();
+        StartProcessingQueues();
+        _ = EnsureAiSessionsAsync();
         if (_startHidden)
         {
             Hide();
@@ -199,7 +202,13 @@ public partial class MainWindow : Window
     private async Task EnsureVisibleCanvasAsync()
     {
         if (!IsVisible || WindowState == WindowState.Minimized || _exiting) return;
+        if (_showAiSessions) { await ShowAiSessionsAsync(); return; }
         if (_sidebarDirty) RefreshSidebarDocuments();
+        if (UseTextReader)
+        {
+            await ShowTextReaderAsync();
+            return;
+        }
         if (CanvasView is null)
         {
             _webInitialization ??= InitializeWebViewAsync();
@@ -212,7 +221,7 @@ public partial class MainWindow : Window
     {
         try
         {
-            var userData = Path.Combine(AppSettings.SettingsDirectory, "WebView2");
+            var userData = Path.Combine(ProfileDirectory, "WebView2");
             Directory.CreateDirectory(userData);
             var environment = await CoreWebView2Environment.CreateAsync(null, userData);
             var view = new Microsoft.Web.WebView2.Wpf.WebView2
@@ -279,7 +288,7 @@ public partial class MainWindow : Window
 
     private async void Core_WebMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
-        if (!IsTrustedCanvasUri(e.Source))
+        if (!ReferenceEquals(sender, CanvasView?.CoreWebView2) || !IsTrustedCanvasUri(e.Source))
         {
             return;
         }
@@ -336,8 +345,11 @@ public partial class MainWindow : Window
                     CompleteCanvasRequest(message, succeeded: false);
                     break;
                 case "DocumentRendered":
-                    if (message.DocumentId == _activeDocument?.FilePath) _canvasLoading = false;
-                    SetStatus(L("StatusReady"));
+                    HandleDocumentRendered(message);
+                    break;
+                case "RequestFullDocument":
+                    if (message.DocumentId == _activeDocument?.FilePath && _activeDocument is { } failedDocument)
+                        await SendOpenDocumentAsync(failedDocument);
                     break;
                 case "ExportResult":
                     CompleteCanvasRequest(message, succeeded: true);
@@ -414,10 +426,12 @@ public partial class MainWindow : Window
                 documentPath,
                 message.RequestId);
             SetStatus(L("StatusAutosavedFormat", DateTime.Now));
+            if (_canvasDocumentPath == documentPath)
+                foreach (var asset in assets) _canvasFileIds.Add(asset.FileId);
 
             foreach (var job in ocrJobs)
             {
-                _ = RunOcrAsync(document, job.Asset, job.Original, job.X, job.Y);
+                await RunOcrAsync(document, job.Asset, job.Original, job.X, job.Y);
             }
         }
         catch (RevisionConflictException ex)
@@ -489,14 +503,14 @@ public partial class MainWindow : Window
         return ids;
     }
 
-    private static async Task<string?> SaveSceneRecoveryAsync(
+    private async Task<string?> SaveSceneRecoveryAsync(
         PinboardDocument sourceDocument,
         string sceneJson,
         IReadOnlyList<(string FileId, AssetRecord Asset)> assets,
         string reason)
     {
         var recovery = Path.Combine(
-            AppSettings.RecoveryDirectory,
+            Path.Combine(ProfileDirectory, "Recovery"),
             $"scene-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.pinboard");
         try
         {
@@ -515,26 +529,15 @@ public partial class MainWindow : Window
 
     private async Task RunOcrAsync(PinboardDocument document, AssetRecord asset, byte[] originalBytes, double x, double y)
     {
-        await _ocrGate.WaitAsync();
         try
         {
-            var results = await _ocrService.RecognizeAsync(originalBytes, _settings.OcrChinese, _settings.OcrEnglish);
-            foreach (var result in results)
-            {
-                await document.SaveOcrAsync(asset.Hash, result.Language, result.Text, result.Status, result.Error, x, y);
-            }
-            await Dispatcher.InvokeAsync(() => SetStatus(results.Any(result => result.Status == "complete")
-                ? L("StatusOcrComplete")
-                : L("StatusOcrUnavailable")));
+            await _ocrQueue.EnqueueAsync(document.FilePath, asset.Hash, originalBytes, x, y,
+                _settings.OcrChinese, _settings.OcrEnglish);
         }
         catch (Exception ex)
         {
             DiagnosticLog.Write("ocr", ex);
             await Dispatcher.InvokeAsync(() => SetStatus(L("StatusOcrUnavailable")));
-        }
-        finally
-        {
-            _ocrGate.Release();
         }
     }
 
@@ -561,31 +564,51 @@ public partial class MainWindow : Window
         }
         if (activate)
         {
+            _showAiSessions = false;
+            AiSessionsSidebarButton.Background = System.Windows.Media.Brushes.Transparent;
+            if (_activeDocument?.FilePath != path)
+            {
+                await FlushBeforeDocumentSwitchAsync();
+                RememberReaderState();
+                _textReader?.Clear();
+                _readerDocumentPath = null;
+                _pendingFocus = null;
+            }
             _activeDocument = document;
             HeaderDocumentTitle.Text = document.Title;
             Title = $"{document.Title} - Pinboard";
         }
 
-        RefreshSidebarDocuments();
+        RequestSidebarRefresh();
+        UpdateTextViewToggle();
         if (activate && refreshCanvas)
         {
-            if (_webReady)
+            if (UseTextReader && IsVisible)
+                await ShowTextReaderAsync();
+            else if (_webReady)
             {
                 await SendOpenDocumentAsync(document);
             }
+            else if (IsVisible) await EnsureVisibleCanvasAsync();
         }
         UpdateCaptureTargetText();
         return document;
     }
 
-    private async Task SendOpenDocumentAsync(PinboardDocument document)
+    private async Task SendOpenDocumentAsync(PinboardDocument document, bool incremental = false)
     {
-        var snapshot = await document.LoadSnapshotAsync();
         if (!_webReady || CanvasView?.CoreWebView2 is null || _activeDocument != document) return;
+        var useDelta = incremental && _canvasDocumentPath == document.FilePath;
+        var snapshot = await document.LoadSnapshotAsync(includeFiles: true,
+            acknowledgedFileIds: useDelta ? _canvasFileIds : null);
+        if (_activeDocument != document || !_webReady || CanvasView?.CoreWebView2 is null) return;
+        if (!useDelta) _canvasFileIds.Clear();
+        _canvasDocumentPath = document.FilePath;
+        _expectedCanvasRevision = snapshot.Revision;
         var payload = new
         {
             version = 1,
-            type = "OpenDocument",
+            type = useDelta ? "ExternalDocumentUpdated" : "OpenDocument",
             documentId = document.FilePath,
             payload = new
             {
@@ -613,7 +636,7 @@ public partial class MainWindow : Window
 
     private async Task<bool> BeginExternalMutationIfActiveAsync(string targetPath)
     {
-        if (!_webReady
+        if (!IsCanvasVisible || !_webReady
             || _activeDocument is null
             || !_activeDocument.FilePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase))
         {
@@ -678,127 +701,18 @@ public partial class MainWindow : Window
         ArmCaptureOnly(L("StatusWaitingDefaultPixPinClipboard"));
     }
 
-    private async void ClipboardCapture_ImageCaptured(object? sender, byte[] bytes)
+    private void ClipboardCapture_ImageCaptured(object? sender, byte[] bytes)
     {
         if (_exiting) return;
-        await _captureGate.WaitAsync();
-        AssetRecord? processedAsset = null;
-        string? targetPath = null;
-        bool externalMutationStarted = false;
-        bool canvasReloaded = false;
-        try
-        {
-            SetStatus(L("StatusProcessingCapture"));
-            var asset = await Task.Run(() => _imageProcessor.Process(bytes, _settings.WebpQuality));
-            processedAsset = asset;
-            targetPath = Path.GetFullPath(_settings.ResolveCaptureTarget(DateTimeOffset.Now));
-            externalMutationStarted = await BeginExternalMutationIfActiveAsync(targetPath);
-            var document = await OpenDocumentAsync(
-                targetPath,
-                activate: _activeDocument is null || _activeDocument.FilePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase),
-                refreshCanvas: false, captureGateHeld: true);
-            var result = await document.InsertCapturedImageAsync(asset, "pixpin");
-            _lastInsertedElements[targetPath] = result.ElementId;
-            _ = RunOcrAsync(document, asset, bytes, result.X, result.Y);
-
-            if (_activeDocument?.FilePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase) == true && _webReady)
-            {
-                await SendOpenDocumentAsync(document);
-                canvasReloaded = true;
-            }
-            ShowNotification(L("CaptureAddedTitleFormat", document.Title), L("CaptureAddedBody"));
-            SetStatus(L("StatusCaptureAddedFormat", document.Title));
-        }
-        catch (Exception ex)
-        {
-            if (processedAsset is not null)
-            {
-                try
-                {
-                    var recovery = Path.Combine(AppSettings.RecoveryDirectory, $"capture-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.pinboard");
-                    var recoveryDocument = new PinboardDocument(recovery);
-                    await recoveryDocument.InitializeAsync();
-                    await recoveryDocument.InsertCapturedImageAsync(processedAsset, "pixpin-recovery");
-                    SetStatus(L("StatusCaptureRecoveryFormat", recovery));
-                    ShowNotification(L("CaptureRecoveredTitle"), L("CaptureRecoveredBodyFormat", Path.GetFileName(recovery)));
-                    return;
-                }
-                catch
-                {
-                    // Fall through to the original error when recovery storage also fails.
-                }
-            }
-            SetStatus(L("StatusCaptureFailedFormat", ex.Message));
-            ShowNotification(L("CaptureFailedTitle"), ex.Message);
-        }
-        finally
-        {
-            if (externalMutationStarted && !canvasReloaded && targetPath is not null)
-            {
-                await ReloadActiveDocumentAfterExternalMutationFailureAsync(targetPath);
-            }
-            _captureGate.Release();
-        }
+        var timestamp = sender == _clipboardCapture ? _clipboardCapture.LastImageCapturedAt : DateTimeOffset.Now;
+        TrackCaptureWrite(JournalCaptureAsync(bytes, null, timestamp, _clipboardCapture.LastImageSequence));
     }
 
-    private async void ClipboardCapture_TextCaptured(object? sender, string text)
+    private void ClipboardCapture_TextCaptured(object? sender, string text)
     {
-        if (_exiting || !_settings.TextCaptureEnabled || _settings.TextCapturePaused || string.IsNullOrWhiteSpace(text))
-        {
-            return;
-        }
-
-        await _captureGate.WaitAsync();
-        string? targetPath = null;
-        bool externalMutationStarted = false;
-        bool canvasReloaded = false;
-        try
-        {
-            SetStatus(L("StatusSavingTextClip"));
-            targetPath = Path.GetFullPath(_settings.ResolveTextCaptureTarget());
-            externalMutationStarted = await BeginExternalMutationIfActiveAsync(targetPath);
-            var document = await OpenDocumentAsync(targetPath,
-                activate: _activeDocument is null || _activeDocument.FilePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase),
-                refreshCanvas: false, captureGateHeld: true);
-            var result = await document.InsertCapturedTextAsync(text, "clipboard");
-            _lastInsertedElements[targetPath] = result.ElementId;
-
-            if (_activeDocument?.FilePath.Equals(targetPath, StringComparison.OrdinalIgnoreCase) == true && _webReady)
-            {
-                await SendOpenDocumentAsync(document);
-                canvasReloaded = true;
-            }
-
-            SetStatus(L("StatusTextClipAddedFormat", document.Title));
-        }
-        catch (Exception ex)
-        {
-            try
-            {
-                var recovery = Path.Combine(AppSettings.RecoveryDirectory, $"text-clip-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.pinboard");
-                var recoveryDocument = new PinboardDocument(recovery);
-                await recoveryDocument.InitializeAsync();
-                await recoveryDocument.InsertCapturedTextAsync(text, "clipboard-recovery");
-                SetStatus(L("StatusTextClipRecoveryFormat", recovery));
-                ShowNotification(L("TextClipRecoveredTitle"), L("TextClipRecoveredBodyFormat", Path.GetFileName(recovery)));
-                return;
-            }
-            catch
-            {
-                // The original exception below is more useful when recovery storage also fails.
-            }
-
-            SetStatus(L("StatusTextClipFailedFormat", ex.Message));
-            ShowNotification(L("TextClipFailedTitle"), ex.Message);
-        }
-        finally
-        {
-            if (externalMutationStarted && !canvasReloaded && targetPath is not null)
-            {
-                await ReloadActiveDocumentAfterExternalMutationFailureAsync(targetPath);
-            }
-            _captureGate.Release();
-        }
+        if (_exiting || !_settings.TextCaptureEnabled || _settings.TextCapturePaused || string.IsNullOrWhiteSpace(text)) return;
+        var timestamp = sender == _clipboardCapture ? _clipboardCapture.LastTextCapturedAt : DateTimeOffset.Now;
+        TrackCaptureWrite(JournalCaptureAsync(null, text, timestamp, _clipboardCapture.LastTextSequence));
     }
 
     private async Task ReloadActiveDocumentAfterExternalMutationFailureAsync(string targetPath)
@@ -1396,6 +1310,7 @@ public partial class MainWindow : Window
 
     private async Task ShowSearchAsync(bool allDocuments)
     {
+        if (_showAiSessions) { _aiSessionsView?.FocusSearch(); return; }
         var documentPath = allDocuments ? null : _activeDocument?.FilePath;
         if (!allDocuments && documentPath is null)
         {
@@ -1408,7 +1323,10 @@ public partial class MainWindow : Window
         }
         var document = await OpenDocumentAsync(hit.DocumentPath, activate: true);
         var elementId = hit.Kind == "text" ? hit.ReferenceId : await ResolveOcrElementIdAsync(document, hit.ReferenceId);
-        PostToCanvas("FocusElement", new { elementId, x = hit.X, y = hit.Y }, document.FilePath);
+        if (UseTextReader)
+            _textReader?.FocusElement(elementId ?? string.Empty, window.SelectedQuery);
+        else
+            FocusCanvasWhenReady(new { elementId, query = window.SelectedQuery, x = hit.X, y = hit.Y }, document.FilePath);
     }
 
     private void CaptureButton_Click(object sender, RoutedEventArgs e) => BeginPixPinCapture();
@@ -1417,7 +1335,8 @@ public partial class MainWindow : Window
     {
         if (_activeDocument is not null)
         {
-            PostToCanvas("FocusBottom", new { }, _activeDocument.FilePath);
+            if (UseTextReader) _textReader?.FocusBottom();
+            else PostToCanvas("FocusBottom", new { }, _activeDocument.FilePath);
         }
     }
 
@@ -1440,10 +1359,13 @@ public partial class MainWindow : Window
         Add(L("MainOpenButton"), OpenButton_Click);
         Add(L("MainImportButton"), ImportButton_Click);
         menu.Items.Add(new System.Windows.Controls.Separator());
-        Add(L("MainExportButton"), ExportButton_Click);
-        Add(L("MainSaveCopyButton"), SaveCopyButton_Click);
-        Add(L("MainLocateLatest"), LocateButton_Click);
-        Add(L("MainResetInboxButton"), ResetInboxButton_Click);
+        if (!_showAiSessions)
+        {
+            Add(L("MainExportButton"), ExportButton_Click);
+            Add(L("MainSaveCopyButton"), SaveCopyButton_Click);
+            Add(L("MainLocateLatest"), LocateButton_Click);
+            Add(L("MainResetInboxButton"), ResetInboxButton_Click);
+        }
         menu.Items.Add(new System.Windows.Controls.Separator());
         Add(_settings.AlwaysOnTop ? L("MainTopmostOn") : L("MainTopmostOff"), AlwaysOnTopButton_Click);
         Add(L("LanguageSwitchLabel"), LanguageButton_Click);
@@ -1457,6 +1379,11 @@ public partial class MainWindow : Window
     {
         if (_activeDocument is null)
         {
+            return;
+        }
+        if (UseTextReader)
+        {
+            _textReader?.FocusLatest();
             return;
         }
         if (_lastInsertedElements.TryGetValue(_activeDocument.FilePath, out var elementId))
@@ -1525,6 +1452,9 @@ public partial class MainWindow : Window
         };
         try
         {
+            if (UseTextReader) await SwitchToCanvasAsync();
+            var renderDeadline = DateTime.UtcNow.AddSeconds(30);
+            while ((!_webReady || _canvasLoading) && DateTime.UtcNow < renderDeadline) await Task.Delay(50);
             SetStatus(L("StatusExportingFormat", Path.GetFileName(dialog.FileName)));
             var result = await RequestCanvasAsync("Export", new { kind }, _activeDocument.FilePath, TimeSpan.FromSeconds(30));
             if (kind == "png")
@@ -1562,6 +1492,12 @@ public partial class MainWindow : Window
     private void SettingsButton_Click(object sender, RoutedEventArgs e)
     {
         var window = new SettingsWindow(_settings, _activeDocument?.FilePath, _pixPin) { Owner = this };
+        window.AiSessionsSettingsRequested += async owner =>
+        {
+            await EnsureAiSessionsAsync();
+            if (_aiSessions is not null && _aiDrive is not null)
+                new AiSessionsSettingsWindow(_settings, _aiSessions, _aiDrive) { Owner = owner }.ShowDialog();
+        };
         if (window.ShowDialog() == true)
         {
             _clipboardCapture.ConfigureTextCapture(_settings);
@@ -1580,7 +1516,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_activeDocument?.FilePath.Equals(item.Path, StringComparison.OrdinalIgnoreCase) == true)
+        if (!_showAiSessions && _activeDocument?.FilePath.Equals(item.Path, StringComparison.OrdinalIgnoreCase) == true)
         {
             return;
         }
@@ -1637,6 +1573,9 @@ public partial class MainWindow : Window
         RefreshTrayMenuText();
         UpdateCaptureTargetText();
         PostToCanvas("SetLanguage", new { language = LocalizationService.CurrentLanguage }, _activeDocument?.FilePath);
+        UpdateTextViewToggle();
+        if (_showAiSessions) { _aiSessionsView?.ApplyLanguage(); _ = ShowAiSessionsAsync(); }
+        if (UseTextReader) _ = ShowTextReaderAsync();
         SetStatus(L("LanguageChanged"));
     }
 
@@ -1834,13 +1773,9 @@ public partial class MainWindow : Window
         _sidebarSelectionChanging = true;
         try
         {
-            _sidebarDocuments.Clear();
-            foreach (var item in items)
-            {
-                _sidebarDocuments.Add(item);
-            }
+            ApplySidebarItems(items.ToArray());
 
-            SidebarList.SelectedItem = _activeDocument is null
+            SidebarList.SelectedItem = _showAiSessions || _activeDocument is null
                 ? null
                 : _sidebarDocuments.FirstOrDefault(item => item.Path.Equals(_activeDocument.FilePath, StringComparison.OrdinalIgnoreCase));
         }
@@ -1874,14 +1809,19 @@ public partial class MainWindow : Window
     private void SidebarGroup_Loaded(object sender, RoutedEventArgs e)
     {
         if (sender is System.Windows.Controls.Expander { DataContext: CollectionViewGroup group } expander
-            && _expandedGroups.TryGetValue(group.Name.ToString()!, out var expanded))
+            && _expandedGroups.TryGetValue(StableGroupKey(group), out var expanded))
             expander.IsExpanded = expanded;
     }
 
     private void SidebarGroup_Changed(object sender, RoutedEventArgs e)
     {
         if (!_sidebarSelectionChanging && sender is System.Windows.Controls.Expander { IsLoaded: true, DataContext: CollectionViewGroup group } expander)
-            _expandedGroups[group.Name.ToString()!] = expander.IsExpanded;
+        {
+            _expandedGroups[StableGroupKey(group)] = expander.IsExpanded;
+            _settings.ExpandedSidebarGroups = new(_expandedGroups, StringComparer.Ordinal);
+            try { _settings.Save(); }
+            catch (Exception exception) { DiagnosticLog.Write("sidebar-preferences", exception); }
+        }
     }
 
     private void OpenLibraryButton_Click(object sender, RoutedEventArgs e) =>
@@ -1972,7 +1912,8 @@ public partial class MainWindow : Window
         }
         else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.F)
         {
-            _ = ShowSearchAsync(allDocuments: false);
+            if (UseTextReader) _textReader?.FocusSearch();
+            else _ = ShowSearchAsync(allDocuments: false);
             e.Handled = true;
         }
     }
@@ -1997,8 +1938,22 @@ public partial class MainWindow : Window
             _settings.CapturePaused = _trayPauseItem.Checked;
             _settings.Save();
             SetStatus(_settings.CapturePaused ? L("StatusPixPinPaused") : L("StatusPixPinResumed"));
+            UpdateCaptureTargetText();
         });
         menu.Items.Add(_trayPauseItem);
+        _trayTextPauseItem = new Forms.ToolStripMenuItem(UiText("Pause text collection", "暂停文字收集"))
+        {
+            Checked = _settings.TextCapturePaused, CheckOnClick = true,
+            Enabled = _settings.TextCaptureEnabled
+        };
+        _trayTextPauseItem.CheckedChanged += (_, _) => Dispatcher.Invoke(() =>
+        {
+            _settings.TextCapturePaused = _trayTextPauseItem.Checked;
+            _settings.Save();
+            _clipboardCapture.ConfigureTextCapture(_settings);
+            UpdateCaptureTargetText();
+        });
+        menu.Items.Add(_trayTextPauseItem);
         _trayPixPinItem = new Forms.ToolStripMenuItem(L("TrayPixPin"), null, (_, _) => Dispatcher.Invoke(() => new PixPinIntegrationWindow(_pixPin) { Owner = this }.ShowDialog()));
         menu.Items.Add(_trayPixPinItem);
         menu.Items.Add(new Forms.ToolStripSeparator());
@@ -2108,7 +2063,14 @@ public partial class MainWindow : Window
         await _captureGate.WaitAsync();
         try
         {
-            if (IsVisible && WindowState != WindowState.Minimized || CanvasView is null) return;
+            if (IsVisible && WindowState != WindowState.Minimized) return;
+            if (CanvasView is null)
+            {
+                RememberReaderState();
+                _textReader?.Clear();
+                _readerDocumentPath = null;
+                return;
+            }
             if (!_webReady || _canvasLoading || _pendingCanvasRequests.Count > 0) { _canvasIdleTimer.Start(); return; }
             if (_activeDocument is { } document)
             {
@@ -2130,6 +2092,8 @@ public partial class MainWindow : Window
             var view = CanvasView;
             CanvasView = null;
             view.CoreWebView2.WebMessageReceived -= Core_WebMessageReceived;
+            _canvasFileIds.Clear();
+            _canvasDocumentPath = null;
             view.Dispose();
             SetStatus(L("StatusCanvasSleeping"));
         }
@@ -2161,12 +2125,20 @@ public partial class MainWindow : Window
         _canvasIdleTimer.Stop();
         _sidebarRefreshTimer.Stop();
         CanvasView?.Dispose();
+        _ = _captureInbox.StopAsync();
+        _ = _ocrQueue.StopAsync();
+        if (_aiSessions is not null) _ = _aiSessions.StopAsync();
     }
 
     private async void ExitApplication()
     {
         if (_exiting) return;
         _exiting = true;
+        foreach (var write in _captureWrites.ToArray())
+        {
+            try { await write; }
+            catch (Exception exception) { DiagnosticLog.Write("exit-capture-journal", exception); }
+        }
         await _captureGate.WaitAsync();
         try
         {
@@ -2180,6 +2152,11 @@ public partial class MainWindow : Window
                     throw new InvalidOperationException("The active canvas has not confirmed its save.");
             }
             _explicitExit = true;
+            // Release the UI mutation gate before stopping a worker that may be awaiting it.
+            _captureGate.Release();
+            await _captureInbox.StopAsync();
+            await _ocrQueue.StopAsync();
+            if (_aiSessions is not null) await _aiSessions.StopAsync();
             Close();
             System.Windows.Application.Current.Shutdown();
         }
@@ -2190,7 +2167,7 @@ public partial class MainWindow : Window
             ShowAndActivate();
             MessageBox.Show(this, L("ExitSaveFailed"), "Pinboard", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
-        finally { _captureGate.Release(); }
+        finally { if (!_explicitExit) _captureGate.Release(); }
     }
 
     private void PostToCanvas(string type, object payload, string? documentId = null, string? requestId = null)
@@ -2261,7 +2238,7 @@ public partial class MainWindow : Window
     private void UpdateCaptureTargetText()
     {
         var target = GetCaptureTargetTitle();
-        CaptureTargetText.Text = L("CaptureTargetFormat", target);
+        UpdateReceiveStatus(target);
         if (_trayTargetItem is not null)
         {
             _trayTargetItem.Text = L("TrayCurrentTargetFormat", target);
@@ -2269,6 +2246,11 @@ public partial class MainWindow : Window
         if (_trayPauseItem is not null)
         {
             _trayPauseItem.Checked = _settings.CapturePaused;
+        }
+        if (_trayTextPauseItem is not null)
+        {
+            _trayTextPauseItem.Enabled = _settings.TextCaptureEnabled;
+            _trayTextPauseItem.Checked = _settings.TextCapturePaused;
         }
     }
 
@@ -2289,7 +2271,8 @@ public partial class MainWindow : Window
     {
         if (_trayOpenItem is not null) _trayOpenItem.Text = L("TrayOpen");
         if (_trayCaptureItem is not null) _trayCaptureItem.Text = L("TrayCaptureDefault");
-        if (_trayPauseItem is not null) _trayPauseItem.Text = L("TrayPause");
+        if (_trayPauseItem is not null) _trayPauseItem.Text = UiText("Pause screenshot collection", "暂停截图收集");
+        if (_trayTextPauseItem is not null) _trayTextPauseItem.Text = UiText("Pause text collection", "暂停文字收集");
         if (_trayPixPinItem is not null) _trayPixPinItem.Text = L("TrayPixPin");
         if (_trayExitItem is not null) _trayExitItem.Text = L("TrayExit");
         if (_trayTargetItem is not null) _trayTargetItem.Text = L("TrayTarget");

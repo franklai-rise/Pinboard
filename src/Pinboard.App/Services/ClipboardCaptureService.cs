@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
+using System.Runtime.InteropServices;
 using Pinboard.App.Interop;
 using Pinboard.App.Models;
 
@@ -8,17 +9,19 @@ namespace Pinboard.App.Services;
 
 public sealed class ClipboardCaptureService : IDisposable
 {
-    private const int MaxCapturedTextLength = 100_000;
-    private const string TruncatedTextMarker = "\n\n[Pinboard: clipboard text was truncated at 100,000 characters.]";
     private static readonly object InternalTextLock = new();
     private static string? _internalText;
+    private static uint _internalTextSequence;
     private static DateTimeOffset _internalTextExpiresAt;
     private HwndSource? _source;
     private uint _armedSequence;
     private uint _lastTextSequence;
     private CancellationTokenSource? _armCancellation;
+    private CancellationTokenSource? _textRetryCancellation;
+    private uint _textRetrySequence;
+    private long _armGeneration;
     private bool _processing;
-    private bool _textProcessing;
+    private bool _disposed;
     private ClipboardTextPrivacyFilter _textPrivacyFilter = new(AppSettings.CreateDefaultExcludedApplications());
 
     public event EventHandler<byte[]>? ImageCaptured;
@@ -29,6 +32,10 @@ public sealed class ClipboardCaptureService : IDisposable
     public bool TextCaptureEnabled { get; set; }
     public bool TextCapturePaused { get; set; }
     public bool TextPrivacyModeEnabled { get; set; } = true;
+    public DateTimeOffset LastImageCapturedAt { get; private set; }
+    public DateTimeOffset LastTextCapturedAt { get; private set; }
+    public uint LastImageSequence { get; private set; }
+    public uint LastTextSequence { get; private set; }
 
     public void ConfigureTextCapture(AppSettings settings)
     {
@@ -36,6 +43,7 @@ public sealed class ClipboardCaptureService : IDisposable
         TextCapturePaused = settings.TextCapturePaused;
         TextPrivacyModeEnabled = settings.TextPrivacyModeEnabled;
         _textPrivacyFilter = new ClipboardTextPrivacyFilter(settings.TextCaptureExcludedApplications);
+        if (!CanCaptureText) CancelTextRetry();
     }
 
     /// <summary>
@@ -46,19 +54,25 @@ public sealed class ClipboardCaptureService : IDisposable
     {
         lock (InternalTextLock)
         {
-            _internalText = text;
+            _internalText = NormalizeText(text);
+            _internalTextSequence = 0;
             _internalTextExpiresAt = DateTimeOffset.UtcNow.AddSeconds(5);
         }
 
         try
         {
             Clipboard.SetText(text);
+            lock (InternalTextLock)
+            {
+                _internalTextSequence = NativeMethods.GetClipboardSequenceNumber();
+            }
         }
         catch
         {
             lock (InternalTextLock)
             {
                 _internalText = null;
+                _internalTextSequence = 0;
                 _internalTextExpiresAt = default;
             }
             throw;
@@ -79,19 +93,26 @@ public sealed class ClipboardCaptureService : IDisposable
     public void Arm(TimeSpan timeout)
     {
         Disarm();
+        CancelTextRetry();
         _armedSequence = NativeMethods.GetClipboardSequenceNumber();
-        _armCancellation = new CancellationTokenSource(timeout);
-        _armCancellation.Token.Register(() =>
+        var generation = _armGeneration;
+        var cancellation = new CancellationTokenSource(timeout);
+        _armCancellation = cancellation;
+        cancellation.Token.Register(() =>
         {
-            if (!_processing)
+            var dispatcher = _source?.Dispatcher ?? Application.Current?.Dispatcher;
+            dispatcher?.BeginInvoke(() =>
             {
-                Application.Current.Dispatcher.BeginInvoke(() => CaptureTimedOut?.Invoke(this, EventArgs.Empty));
-            }
+                if (_disposed || generation != _armGeneration || !ReferenceEquals(_armCancellation, cancellation)) return;
+                Disarm();
+                CaptureTimedOut?.Invoke(this, EventArgs.Empty);
+            });
         });
     }
 
     public void Disarm()
     {
+        _armGeneration++;
         _armCancellation?.Cancel();
         _armCancellation?.Dispose();
         _armCancellation = null;
@@ -100,102 +121,142 @@ public sealed class ClipboardCaptureService : IDisposable
 
     private IntPtr WindowProc(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
-        if (message != NativeMethods.WmClipboardUpdate)
+        if (_disposed || message != NativeMethods.WmClipboardUpdate)
         {
             return IntPtr.Zero;
         }
 
         var sequence = NativeMethods.GetClipboardSequenceNumber();
-        if (IsArmed && !_processing && sequence != 0 && sequence != _armedSequence)
+        var capturedAt = DateTimeOffset.Now;
+        var armed = IsArmed;
+        if (armed && !_processing && sequence != 0 && sequence != _armedSequence)
         {
             _processing = true;
-            _ = TryConsumeImageAsync();
+            _ = TryConsumeImageAsync(sequence, capturedAt, _armGeneration);
         }
 
         // An armed PixPin capture owns the next clipboard change. Do not treat any
         // temporary text format it publishes as a normal text clip.
-        if (!IsArmed)
+        if (!armed)
         {
-            QueueTextCapture(sequence);
+            QueueTextCapture(sequence, capturedAt);
         }
         return IntPtr.Zero;
     }
 
-    private void QueueTextCapture(uint sequence)
+    private void QueueTextCapture(uint sequence, DateTimeOffset capturedAt)
     {
-        if (!CanCaptureText || _textProcessing || sequence == 0 || sequence == _lastTextSequence)
+        if (_disposed || !CanCaptureText || IsArmed || sequence == 0 || sequence == _lastTextSequence)
         {
             return;
         }
 
-        _lastTextSequence = sequence;
-        _textProcessing = true;
-        _ = TryConsumeTextAsync();
+        if (_textRetryCancellation is not null && _textRetrySequence != sequence) CancelTextRetry();
+        // Read this notification immediately, even if an older retry is waiting.
+        // A retry flag must never block an observable new clipboard snapshot.
+        var state = TryCaptureText(sequence, capturedAt);
+        if (state == ClipboardReadState.Busy && _textRetryCancellation is null)
+        {
+            var cancellation = new CancellationTokenSource();
+            _textRetryCancellation = cancellation;
+            _textRetrySequence = sequence;
+            _ = RetryTextAsync(sequence, capturedAt, cancellation);
+        }
+        else if (state == ClipboardReadState.Changed)
+        {
+            QueueLatestText();
+        }
+        else if (state != ClipboardReadState.Busy)
+        {
+            CancelTextRetry();
+        }
     }
 
-    private async Task TryConsumeImageAsync()
+    private async Task TryConsumeImageAsync(uint sequence, DateTimeOffset capturedAt, long generation)
     {
-        for (var attempt = 0; attempt < 10 && IsArmed; attempt++)
+        for (var attempt = 0; attempt < 10 && IsArmed && generation == _armGeneration; attempt++)
         {
-            try
+            var snapshot = ClipboardSnapshotReader.Read(sequence, capturedAt,
+                NativeMethods.GetClipboardSequenceNumber, ReadClipboardImage, value => value.Length > 0, IsTransientBusy);
+            if (snapshot.State == ClipboardReadState.Captured && IsArmed && generation == _armGeneration)
             {
-                var bytes = ReadClipboardImage();
-                if (bytes is { Length: > 0 })
-                {
-                    var handler = ImageCaptured;
-                    Disarm();
-                    handler?.Invoke(this, bytes);
-                    return;
-                }
+                LastImageCapturedAt = snapshot.CapturedAt;
+                LastImageSequence = snapshot.Sequence;
+                var handler = ImageCaptured;
+                Disarm();
+                handler?.Invoke(this, snapshot.Value!);
+                return;
             }
-            catch (System.Runtime.InteropServices.ExternalException)
+            if (snapshot.State == ClipboardReadState.Changed)
             {
-                // PixPin can hold the clipboard briefly while publishing all formats.
+                sequence = NativeMethods.GetClipboardSequenceNumber();
+                capturedAt = DateTimeOffset.Now;
+                if (sequence == 0 || sequence == _armedSequence) break;
+                continue;
             }
-
+            if (snapshot.State != ClipboardReadState.Busy) break;
             await Task.Delay(100);
         }
-        _processing = false;
+        if (generation == _armGeneration) _processing = false;
     }
 
-    private async Task TryConsumeTextAsync()
+    private ClipboardReadState TryCaptureText(uint sequence, DateTimeOffset capturedAt)
     {
+        var snapshot = ClipboardSnapshotReader.Read(sequence, capturedAt,
+            NativeMethods.GetClipboardSequenceNumber, ReadClipboardText,
+            value => !string.IsNullOrWhiteSpace(value), IsTransientBusy);
+        if (snapshot.State is ClipboardReadState.Captured or ClipboardReadState.Ignored or ClipboardReadState.Failed)
+            _lastTextSequence = snapshot.Sequence;
+        if (snapshot.State != ClipboardReadState.Captured) return snapshot.State;
+        if (ConsumeInternalText(snapshot.Value!, snapshot.Sequence)) return ClipboardReadState.Ignored;
+        LastTextCapturedAt = snapshot.CapturedAt;
+        LastTextSequence = snapshot.Sequence;
+        TextCaptured?.Invoke(this, ClipboardTextCapturePolicy.Truncate(snapshot.Value!));
+        return ClipboardReadState.Captured;
+    }
+
+    private async Task RetryTextAsync(uint sequence, DateTimeOffset capturedAt, CancellationTokenSource cancellation)
+    {
+        var token = cancellation.Token;
         try
         {
-            for (var attempt = 0; attempt < 10 && CanCaptureText && !IsArmed; attempt++)
+            for (var attempt = 0; attempt < 10 && CanCaptureText && !IsArmed && !_disposed; attempt++)
             {
-                try
+                await Task.Delay(75, token);
+                if (_disposed || !CanCaptureText || IsArmed || sequence == _lastTextSequence) return;
+                var state = TryCaptureText(sequence, capturedAt);
+                if (state == ClipboardReadState.Changed)
                 {
-                    var text = ReadClipboardText();
-                    if (!string.IsNullOrWhiteSpace(text))
-                    {
-                        // The clipboard can change again while a previous read is
-                        // settling. Remember the actual sequence that produced this
-                        // text so the final catch-up check does not save it twice.
-                        _lastTextSequence = NativeMethods.GetClipboardSequenceNumber();
-                        TextCaptured?.Invoke(this, text);
-                        return;
-                    }
+                    QueueLatestText();
+                    return;
                 }
-                catch (System.Runtime.InteropServices.ExternalException)
-                {
-                    // Another program can briefly own the clipboard while publishing text.
-                }
-
-                await Task.Delay(75);
+                if (state != ClipboardReadState.Busy) return;
             }
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         finally
         {
-            _textProcessing = false;
-
-            // If a rapid second copy happened while the first clipboard read was
-            // settling, process the newest clipboard item next.
-            if (!IsArmed)
+            if (ReferenceEquals(_textRetryCancellation, cancellation))
             {
-                QueueTextCapture(NativeMethods.GetClipboardSequenceNumber());
+                _textRetryCancellation = null;
+                _textRetrySequence = 0;
             }
+            cancellation.Dispose();
         }
+    }
+
+    private void CancelTextRetry()
+    {
+        var cancellation = _textRetryCancellation;
+        _textRetryCancellation = null;
+        _textRetrySequence = 0;
+        cancellation?.Cancel();
+    }
+
+    private void QueueLatestText()
+    {
+        var dispatcher = _source?.Dispatcher ?? Application.Current?.Dispatcher;
+        dispatcher?.BeginInvoke(() => QueueTextCapture(NativeMethods.GetClipboardSequenceNumber(), DateTimeOffset.Now));
     }
 
     private static byte[]? ReadClipboardImage()
@@ -234,13 +295,8 @@ public sealed class ClipboardCaptureService : IDisposable
     {
         // Images and one-file drops are handled by the PixPin flow. Ignoring them
         // here avoids collecting auxiliary text formats from a copied screenshot.
-        if (Clipboard.ContainsImage() || Clipboard.ContainsFileDropList() || !Clipboard.ContainsText())
-        {
-            return null;
-        }
-
-        var text = Clipboard.GetText().Replace("\r\n", "\n").Trim();
-        if (string.IsNullOrWhiteSpace(text) || ConsumeInternalText(text))
+        var text = ReadNativeClipboardText();
+        if (string.IsNullOrWhiteSpace(text))
         {
             return null;
         }
@@ -251,30 +307,28 @@ public sealed class ClipboardCaptureService : IDisposable
             return null;
         }
 
-        if (text.Length <= MaxCapturedTextLength)
-        {
-            return text;
-        }
-
-        return text[..(MaxCapturedTextLength - TruncatedTextMarker.Length)] + TruncatedTextMarker;
+        return text;
     }
 
-    private static bool ConsumeInternalText(string text)
+    private static bool ConsumeInternalText(string text, uint sequence)
     {
         lock (InternalTextLock)
         {
             if (_internalText is null || DateTimeOffset.UtcNow > _internalTextExpiresAt)
             {
                 _internalText = null;
+                _internalTextSequence = 0;
                 return false;
             }
 
-            if (!string.Equals(_internalText, text, StringComparison.Ordinal))
+            if (_internalTextSequence != 0 && _internalTextSequence != sequence
+                || !string.Equals(_internalText, text, StringComparison.Ordinal))
             {
                 return false;
             }
 
             _internalText = null;
+            _internalTextSequence = 0;
             _internalTextExpiresAt = default;
             return true;
         }
@@ -285,6 +339,8 @@ public sealed class ClipboardCaptureService : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        CancelTextRetry();
         Disarm();
         if (_source is not null)
         {
@@ -293,4 +349,46 @@ public sealed class ClipboardCaptureService : IDisposable
             _source = null;
         }
     }
+
+    private static string NormalizeText(string text) => text.Replace("\r\n", "\n").Trim();
+
+    private static bool IsTransientBusy(Exception error) =>
+        error is ExternalException { ErrorCode: unchecked((int)0x800401D0) };
+
+    // One immediate open attempt avoids WPF's internal OLE retry loop. The
+    // clipboard is unlocked before privacy checks or any capture event runs.
+    private static string? ReadNativeClipboardText()
+    {
+        if (!OpenClipboard(IntPtr.Zero)) throw new ExternalException("Clipboard is busy.", unchecked((int)0x800401D0));
+        try
+        {
+            if (IsClipboardFormatAvailable(2) || IsClipboardFormatAvailable(8)
+                || IsClipboardFormatAvailable(17) || IsClipboardFormatAvailable(15)
+                || !IsClipboardFormatAvailable(13)) return null;
+            var handle = GetClipboardData(13);
+            if (handle == IntPtr.Zero) return null;
+            var pointer = GlobalLock(handle);
+            if (pointer == IntPtr.Zero) return null;
+            try { return NormalizeText(Marshal.PtrToStringUni(pointer) ?? ""); }
+            finally { GlobalUnlock(handle); }
+        }
+        finally { CloseClipboard(); }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool OpenClipboard(IntPtr owner);
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool CloseClipboard();
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool IsClipboardFormatAvailable(uint format);
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetClipboardData(uint format);
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern IntPtr GlobalLock(IntPtr handle);
+    [DllImport("kernel32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GlobalUnlock(IntPtr handle);
 }

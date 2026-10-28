@@ -35,6 +35,9 @@ jobs:
         shell: pwsh
         run: ./scripts/check-public-privacy.ps1
 
+      - name: Test website search demo
+        run: node --test site/app.test.mjs
+
       - name: Install web dependencies
         working-directory: web
         run: npm ci

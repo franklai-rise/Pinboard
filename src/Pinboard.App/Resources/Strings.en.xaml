@@ -322,4 +322,5 @@
   <sys:String x:Key="StatusCanvasSleeping">Canvas asleep · automatic collection is still running</sys:String>
   <sys:String x:Key="ExitSaveFailed">Your changes could not be saved. Pinboard will stay open so you can retry or save a copy.</sys:String>
   <sys:String x:Key="SidebarProjects">Projects</sys:String>
+  <sys:String x:Key="AiSessionsTitle">AI Sessions</sys:String>
 </ResourceDictionary>

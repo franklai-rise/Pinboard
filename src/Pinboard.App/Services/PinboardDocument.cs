@@ -140,7 +140,10 @@ public sealed class PinboardDocument
     /// History-only and deleted resources remain in the document for recovery, but
     /// do not need a second in-memory base64 copy merely to open or locate content.
     /// </summary>
-    public async Task<DocumentSnapshot> LoadSnapshotAsync(bool includeFiles, CancellationToken cancellationToken = default)
+    public async Task<DocumentSnapshot> LoadSnapshotAsync(
+        bool includeFiles,
+        CancellationToken cancellationToken = default,
+        IReadOnlySet<string>? acknowledgedFileIds = null)
     {
         await InitializeAsync(cancellationToken);
         await _gate.WaitAsync(cancellationToken);
@@ -157,6 +160,10 @@ public sealed class PinboardDocument
             }
 
             var liveFileIds = GetLiveImageFileIds(scene);
+            if (acknowledgedFileIds is not null)
+            {
+                liveFileIds.ExceptWith(acknowledgedFileIds);
+            }
             if (liveFileIds.Count == 0)
             {
                 return new DocumentSnapshot(FilePath, Title, scene, files, revision);
@@ -358,9 +365,10 @@ public sealed class PinboardDocument
             var scene = await ReadCheckpointSceneAsync(connection, transaction, SchemaVersion, checkpointRevision, cancellationToken)
                 ?? throw new KeyNotFoundException($"Checkpoint revision {checkpointRevision} does not exist.");
             var revision = await GetRevisionAsync(connection, transaction, cancellationToken) + 1;
-            await UpdateSceneAsync(connection, transaction, scene, revision, cancellationToken);
+            var encodedScene = EncodeScene(scene);
+            await UpdateSceneAsync(connection, transaction, scene, revision, cancellationToken, encodedScene);
             await ReindexTextIncrementallyAsync(connection, transaction, scene, cancellationToken);
-            await InsertCheckpointAsync(connection, transaction, revision, scene, $"{reason}:{checkpointRevision}", cancellationToken);
+            await InsertCheckpointAsync(connection, transaction, revision, scene, $"{reason}:{checkpointRevision}", cancellationToken, encodedScene);
             await TrimCheckpointsAsync(connection, transaction, cancellationToken);
             var now = DateTimeOffset.UtcNow.ToString("O");
             await SetMetaAsync(connection, transaction, "modified_utc", now, cancellationToken);
@@ -494,7 +502,9 @@ public sealed class PinboardDocument
     public async Task<InsertResult> InsertCapturedImageAsync(
         AssetRecord asset,
         string source,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? capturedAt = null,
+        string? captureId = null)
     {
         await InitializeAsync(cancellationToken);
         EnsureWritable();
@@ -503,6 +513,11 @@ public sealed class PinboardDocument
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction();
+
+            if (await ReadCaptureReceiptAsync<InsertResult>(connection, transaction, captureId, "image", cancellationToken) is { } replay)
+            {
+                return replay with { SceneJson = await GetSceneAsync(connection, transaction, cancellationToken) };
+            }
 
             var inboxX = await GetMetaDoubleAsync(connection, transaction, "inbox_x", DefaultInboxX, cancellationToken);
             var legacyCursorY = await GetMetaDoubleAsync(connection, transaction, "inbox_cursor_y", DefaultInboxY, cancellationToken);
@@ -513,12 +528,13 @@ public sealed class PinboardDocument
             var y = useFirstColumn ? firstColumnY : secondColumnY;
             var scene = await GetSceneAsync(connection, transaction, cancellationToken);
             var fileId = asset.Hash[..Math.Min(40, asset.Hash.Length)];
-            var result = SceneBuilder.AppendImage(scene, fileId, asset, x, y, source);
+            var result = SceneBuilder.AppendImage(scene, fileId, asset, x, y, source, capturedAt);
 
             await UpsertAssetAsync(connection, transaction, asset, cancellationToken);
-            await UpsertFileMapAsync(connection, transaction, fileId, asset.Hash, cancellationToken);
+            await UpsertFileMapAsync(connection, transaction, fileId, asset.Hash, cancellationToken, capturedAt);
             var revision = await GetRevisionAsync(connection, transaction, cancellationToken) + 1;
-            await UpdateSceneAsync(connection, transaction, result.SceneJson, revision, cancellationToken);
+            var encodedScene = EncodeScene(result.SceneJson);
+            await UpdateSceneAsync(connection, transaction, result.SceneJson, revision, cancellationToken, encodedScene);
             var updatedColumnY = y + result.Height + InboxGap;
             if (useFirstColumn)
             {
@@ -535,10 +551,11 @@ public sealed class PinboardDocument
             await SetMetaAsync(connection, transaction, "modified_utc", DateTimeOffset.UtcNow.ToString("O"), cancellationToken);
             if (await IsCheckpointDueAsync(connection, transaction, cancellationToken))
             {
-                await InsertCheckpointAsync(connection, transaction, revision, result.SceneJson, "capture", cancellationToken);
+                await InsertCheckpointAsync(connection, transaction, revision, result.SceneJson, "capture", cancellationToken, encodedScene);
                 await TrimCheckpointsAsync(connection, transaction, cancellationToken);
                 await SetMetaAsync(connection, transaction, "last_checkpoint_utc", DateTimeOffset.UtcNow.ToString("O"), cancellationToken);
             }
+            await WriteCaptureReceiptAsync(connection, transaction, captureId, "image", result with { SceneJson = string.Empty }, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return result;
         }
@@ -551,7 +568,9 @@ public sealed class PinboardDocument
     public async Task<TextClipInsertResult> InsertCapturedTextAsync(
         string text,
         string source,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        DateTimeOffset? capturedAt = null,
+        string? captureId = null)
     {
         if (string.IsNullOrWhiteSpace(text))
         {
@@ -565,23 +584,35 @@ public sealed class PinboardDocument
         {
             await using var connection = await OpenConnectionAsync(cancellationToken);
             await using var transaction = connection.BeginTransaction();
+            if (await ReadCaptureReceiptAsync<TextClipInsertResult>(connection, transaction, captureId, "text", cancellationToken) is { } replay)
+            {
+                return replay with { SceneJson = await GetSceneAsync(connection, transaction, cancellationToken) };
+            }
             var x = await GetMetaDoubleAsync(connection, transaction, "text_inbox_x", TextInboxX, cancellationToken);
             var y = await GetMetaDoubleAsync(connection, transaction, "text_inbox_cursor_y", TextInboxY, cancellationToken);
             var scene = await GetSceneAsync(connection, transaction, cancellationToken);
-            var result = SceneBuilder.AppendTextClip(scene, text, x, y, source);
+            var appendedText = new List<(string Id, string Text, double X, double Y)>(2);
+            var result = SceneBuilder.AppendTextClip(scene, text, x, y, source, capturedAt, appendedText);
             var revision = await GetRevisionAsync(connection, transaction, cancellationToken) + 1;
 
-            await UpdateSceneAsync(connection, transaction, result.SceneJson, revision, cancellationToken);
-            await ReindexTextIncrementallyAsync(connection, transaction, result.SceneJson, cancellationToken);
+            var encodedScene = EncodeScene(result.SceneJson);
+            await UpdateSceneAsync(connection, transaction, result.SceneJson, revision, cancellationToken, encodedScene);
+            // Clipboard append only adds these two text elements. Existing search rows
+            // are already current and need neither a full scene scan nor a SQL read.
+            foreach (var item in appendedText)
+            {
+                await UpsertSearchAsync(connection, transaction, "text", item.Id, item.Text, item.X, item.Y, cancellationToken);
+            }
             await SetMetaAsync(connection, transaction, "text_inbox_cursor_y", (y + result.Height + TextInboxGap).ToString(CultureInfo.InvariantCulture), cancellationToken);
             await SetMetaAsync(connection, transaction, "last_inserted_element", result.ElementId, cancellationToken);
             await SetMetaAsync(connection, transaction, "modified_utc", DateTimeOffset.UtcNow.ToString("O"), cancellationToken);
             if (await IsCheckpointDueAsync(connection, transaction, cancellationToken))
             {
-                await InsertCheckpointAsync(connection, transaction, revision, result.SceneJson, "text-capture", cancellationToken);
+                await InsertCheckpointAsync(connection, transaction, revision, result.SceneJson, "text-capture", cancellationToken, encodedScene);
                 await TrimCheckpointsAsync(connection, transaction, cancellationToken);
                 await SetMetaAsync(connection, transaction, "last_checkpoint_utc", DateTimeOffset.UtcNow.ToString("O"), cancellationToken);
             }
+            await WriteCaptureReceiptAsync(connection, transaction, captureId, "text", result with { SceneJson = string.Empty }, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             return result;
         }
@@ -637,6 +668,34 @@ public sealed class PinboardDocument
                 await UpsertSearchAsync(connection, transaction, "ocr", refId, text, x, y, cancellationToken);
             }
             await transaction.CommitAsync(cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    /// <summary>Reads OCR status/text without loading the scene or any image BLOBs.</summary>
+    public async Task<IReadOnlyList<OcrTextResult>> LoadOcrResultsAsync(
+        string assetHash,
+        CancellationToken cancellationToken = default)
+    {
+        await InitializeAsync(cancellationToken);
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            await using var connection = await OpenConnectionAsync(cancellationToken);
+            await using var command = connection.CreateCommand();
+            command.CommandText = "SELECT language, text, status, error FROM ocr WHERE asset_hash=$hash COLLATE NOCASE";
+            command.Parameters.AddWithValue("$hash", assetHash);
+            var results = new List<OcrTextResult>();
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                results.Add(new OcrTextResult(reader.GetString(0), reader.GetString(1), reader.GetString(2),
+                    reader.IsDBNull(3) ? null : reader.GetString(3)));
+            }
+            return results;
         }
         finally
         {
@@ -807,13 +866,14 @@ public sealed class PinboardDocument
             }
 
             var revision = currentRevision + 1;
-            await UpdateSceneAsync(connection, transaction, sceneJson, revision, cancellationToken);
+            var encodedScene = EncodeScene(sceneJson);
+            await UpdateSceneAsync(connection, transaction, sceneJson, revision, cancellationToken, encodedScene);
             await ReindexTextIncrementallyAsync(connection, transaction, sceneJson, cancellationToken);
             await SetMetaAsync(connection, transaction, "modified_utc", DateTimeOffset.UtcNow.ToString("O"), cancellationToken);
 
             if (checkpoint || await IsCheckpointDueAsync(connection, transaction, cancellationToken))
             {
-                await InsertCheckpointAsync(connection, transaction, revision, sceneJson, checkpointReason, cancellationToken);
+                await InsertCheckpointAsync(connection, transaction, revision, sceneJson, checkpointReason, cancellationToken, encodedScene);
                 await TrimCheckpointsAsync(connection, transaction, cancellationToken);
                 await SetMetaAsync(connection, transaction, "last_checkpoint_utc", DateTimeOffset.UtcNow.ToString("O"), cancellationToken);
             }
@@ -914,6 +974,12 @@ public sealed class PinboardDocument
                     error TEXT,
                     updated_utc TEXT NOT NULL,
                     PRIMARY KEY(asset_hash, language)
+                );
+                CREATE TABLE IF NOT EXISTS capture_receipts (
+                    capture_id TEXT PRIMARY KEY,
+                    kind TEXT NOT NULL,
+                    result_json TEXT NOT NULL,
+                    saved_utc TEXT NOT NULL
                 );
                 CREATE TABLE IF NOT EXISTS search_content (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1266,7 +1332,7 @@ public sealed class PinboardDocument
         return Convert.ToInt64(await command.ExecuteScalarAsync(cancellationToken) ?? 0, CultureInfo.InvariantCulture);
     }
 
-    private static async Task UpdateSceneAsync(SqliteConnection connection, SqliteTransaction transaction, string sceneJson, long revision, CancellationToken cancellationToken)
+    private static async Task UpdateSceneAsync(SqliteConnection connection, SqliteTransaction transaction, string sceneJson, long revision, CancellationToken cancellationToken, byte[]? encodedScene = null)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -1275,7 +1341,7 @@ public sealed class PinboardDocument
             SET scene_data=$scene, scene_encoding=$encoding, revision=$revision, updated_utc=$now
             WHERE id=1;
             """;
-        command.Parameters.AddWithValue("$scene", EncodeScene(sceneJson));
+        command.Parameters.AddWithValue("$scene", encodedScene ?? EncodeScene(sceneJson));
         command.Parameters.AddWithValue("$encoding", BrotliEncoding);
         command.Parameters.AddWithValue("$revision", revision);
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
@@ -1285,7 +1351,7 @@ public sealed class PinboardDocument
     private static byte[] EncodeScene(string sceneJson)
     {
         using var output = new MemoryStream();
-        using (var compressor = new BrotliStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+        using (var compressor = new BrotliStream(output, CompressionLevel.Fastest, leaveOpen: true))
         using (var writer = new StreamWriter(compressor, new UTF8Encoding(false), bufferSize: 16 * 1024))
         {
             writer.Write(sceneJson);
@@ -1337,7 +1403,7 @@ public sealed class PinboardDocument
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task UpsertFileMapAsync(SqliteConnection connection, SqliteTransaction transaction, string fileId, string assetHash, CancellationToken cancellationToken)
+    private static async Task UpsertFileMapAsync(SqliteConnection connection, SqliteTransaction transaction, string fileId, string assetHash, CancellationToken cancellationToken, DateTimeOffset? capturedAt = null)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -1348,7 +1414,50 @@ public sealed class PinboardDocument
             """;
         command.Parameters.AddWithValue("$fileId", fileId);
         command.Parameters.AddWithValue("$hash", assetHash);
-        command.Parameters.AddWithValue("$created", DateTimeOffset.UtcNow.ToString("O"));
+        command.Parameters.AddWithValue("$created", (capturedAt ?? DateTimeOffset.UtcNow).ToString("O"));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static async Task<T?> ReadCaptureReceiptAsync<T>(
+        SqliteConnection connection, SqliteTransaction transaction, string? captureId,
+        string kind, CancellationToken cancellationToken) where T : class
+    {
+        if (string.IsNullOrWhiteSpace(captureId))
+        {
+            return null;
+        }
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "SELECT kind, result_json FROM capture_receipts WHERE capture_id=$id";
+        command.Parameters.AddWithValue("$id", captureId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+        if (!string.Equals(reader.GetString(0), kind, StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("A capture receipt cannot be reused for another capture type.");
+        }
+        return JsonSerializer.Deserialize<T>(reader.GetString(1))
+            ?? throw new InvalidDataException("The capture receipt is damaged.");
+    }
+
+    private static async Task WriteCaptureReceiptAsync<T>(
+        SqliteConnection connection, SqliteTransaction transaction, string? captureId,
+        string kind, T result, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(captureId))
+        {
+            return;
+        }
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = "INSERT INTO capture_receipts(capture_id, kind, result_json, saved_utc) VALUES($id, $kind, $result, $now)";
+        command.Parameters.AddWithValue("$id", captureId);
+        command.Parameters.AddWithValue("$kind", kind);
+        command.Parameters.AddWithValue("$result", JsonSerializer.Serialize(result));
+        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
@@ -1413,7 +1522,7 @@ public sealed class PinboardDocument
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
-    private static async Task InsertCheckpointAsync(SqliteConnection connection, SqliteTransaction transaction, long revision, string sceneJson, string reason, CancellationToken cancellationToken)
+    private static async Task InsertCheckpointAsync(SqliteConnection connection, SqliteTransaction transaction, long revision, string sceneJson, string reason, CancellationToken cancellationToken, byte[]? encodedScene = null)
     {
         await using var command = connection.CreateCommand();
         command.Transaction = transaction;
@@ -1422,7 +1531,7 @@ public sealed class PinboardDocument
             VALUES($revision, $scene, $encoding, $now, $reason);
             """;
         command.Parameters.AddWithValue("$revision", revision);
-        command.Parameters.AddWithValue("$scene", EncodeScene(sceneJson));
+        command.Parameters.AddWithValue("$scene", encodedScene ?? EncodeScene(sceneJson));
         command.Parameters.AddWithValue("$encoding", BrotliEncoding);
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
         command.Parameters.AddWithValue("$reason", reason);
