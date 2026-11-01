@@ -3,6 +3,9 @@
                     xmlns:sys="clr-namespace:System;assembly=mscorlib">
   <sys:String x:Key="LanguageSwitchLabel">中文</sys:String>
   <sys:String x:Key="LanguageSwitchToolTip">Switch to Chinese</sys:String>
+  <sys:String x:Key="PaneResizeToolTip">Drag to resize. Double-click to reset.</sys:String>
+  <sys:String x:Key="ProjectMenuToolTip">Project actions</sys:String>
+  <sys:String x:Key="MainReceiveSettingsToolTip">Screenshot and text receiving settings</sys:String>
   <sys:String x:Key="LanguageChanged">Interface language changed to English.</sys:String>
   <sys:String x:Key="CommonCancel">Cancel</sys:String>
   <sys:String x:Key="CommonClose">Close</sys:String>
@@ -78,7 +81,7 @@
   <sys:String x:Key="NewBoardDescription">The board is saved in the selected project automatically</sys:String>
   <sys:String x:Key="BoardNameLabel">Board name</sys:String>
   <sys:String x:Key="ProjectLabel">Project</sys:String>
-  <sys:String x:Key="ProjectChoiceHelp">Choose an existing project or type a new project name.</sys:String>
+  <sys:String x:Key="ProjectChoiceHelp">Choose an existing project. Projects can be managed from their sidebar menu.</sys:String>
   <sys:String x:Key="CreateAndOpen">Create and Open</sys:String>
   <sys:String x:Key="DefaultNewBoardName">New Board {0:MM-dd HHmm}</sys:String>
   <sys:String x:Key="WindowNewProjectTitle">New Project</sys:String>

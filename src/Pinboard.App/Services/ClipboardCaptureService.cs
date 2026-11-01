@@ -296,7 +296,7 @@ public sealed class ClipboardCaptureService : IDisposable
         // Images and one-file drops are handled by the PixPin flow. Ignoring them
         // here avoids collecting auxiliary text formats from a copied screenshot.
         var text = ReadNativeClipboardText();
-        if (string.IsNullOrWhiteSpace(text))
+        if (string.IsNullOrWhiteSpace(text) || ClipboardTextCapturePolicy.IsDrawingPayload(text))
         {
             return null;
         }
@@ -364,6 +364,7 @@ public sealed class ClipboardCaptureService : IDisposable
         {
             if (IsClipboardFormatAvailable(2) || IsClipboardFormatAvailable(8)
                 || IsClipboardFormatAvailable(17) || IsClipboardFormatAvailable(15)
+                || NonTextFormats.Any(IsClipboardFormatAvailable)
                 || !IsClipboardFormatAvailable(13)) return null;
             var handle = GetClipboardData(13);
             if (handle == IntPtr.Zero) return null;
@@ -374,6 +375,14 @@ public sealed class ClipboardCaptureService : IDisposable
         }
         finally { CloseClipboard(); }
     }
+
+    private static readonly uint[] NonTextFormats = new[]
+    {
+        "PNG", "image/png", "image/jpeg", "image/webp", "application/vnd.excalidraw+json"
+    }.Select(RegisterClipboardFormat).Where(format => format != 0).ToArray();
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern uint RegisterClipboardFormat(string name);
 
     [DllImport("user32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

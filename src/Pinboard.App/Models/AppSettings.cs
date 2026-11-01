@@ -32,6 +32,8 @@ public sealed class AppSettings
     public string? LastImportDirectory { get; set; }
     public bool StartAtLogin { get; set; } = true;
     public bool SidebarCollapsed { get; set; }
+    public double SidebarWidth { get; set; } = 272;
+    public double TextReaderListRatio { get; set; } = 0.43;
     public bool PreferTextReadingView { get; set; } = true;
     public string? AiSessionsArchivePath { get; set; }
     public bool AiSessionsPaused { get; set; }

@@ -72,9 +72,11 @@ public partial class MainWindow : Window
         _obsidianImporter = new ObsidianImporter(_imageProcessor, _ocrService);
         _projectLibrary = new ProjectLibraryService(settings.LibraryPath);
         var sidebarView = CollectionViewSource.GetDefaultView(_sidebarDocuments);
+        sidebarView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SidebarDocument.ModuleDisplayName)));
         sidebarView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(SidebarDocument.SectionDisplayName)));
         SidebarList.ItemsSource = sidebarView;
         ApplySidebarState();
+        InitializeWorkspacePresentation();
         ApplyAlwaysOnTopState();
         RefreshSidebarDocuments();
         ConfigureLibraryWatcher();
@@ -331,6 +333,9 @@ public partial class MainWindow : Window
                     break;
                 case "SceneChanged":
                     await SaveSceneFromBridgeAsync(message);
+                    break;
+                case "ExitFocusMode":
+                    SetFocusMode(false);
                     break;
                 case "FlushResult":
                     CompleteCanvasRequest(message, succeeded: true);
@@ -625,6 +630,7 @@ public partial class MainWindow : Window
                 }),
                 revision = snapshot.Revision
                 , viewport = _sleepDocumentPath == document.FilePath ? _sleepViewport : null
+                , focusMode = _focusMode
             }
         };
         _canvasLoading = true;
@@ -784,23 +790,6 @@ public partial class MainWindow : Window
                 await ShowNewBoardDialogAsync(projectName);
             }
         }
-    }
-
-    private void NewProjectButton_Click(object sender, RoutedEventArgs e)
-    {
-        ShowNewProjectDialog();
-    }
-
-    private string? ShowNewProjectDialog()
-    {
-        var window = new NewProjectWindow(_projectLibrary) { Owner = this };
-        if (window.ShowDialog() != true || window.ResultProjectName is not { } projectName)
-        {
-            return null;
-        }
-        RefreshSidebarDocuments();
-        SetStatus(L("StatusProjectCreatedFormat", projectName));
-        return projectName;
     }
 
     private async Task ShowNewBoardDialogAsync(string? suggestedProject = null)
@@ -1102,12 +1091,9 @@ public partial class MainWindow : Window
             .ToList();
         if (destinations.Count == 0)
         {
-            var newProject = ShowNewProjectDialog();
-            if (newProject is null)
-            {
-                return;
-            }
-            destinations.Add(newProject);
+            MessageBox.Show(this, UiText("There is no other existing project. You can keep this board here or save a copy.",
+                "暂无其他现有项目，可保留当前画板或保存副本。"), "Pinboard");
+            return;
         }
 
         var window = new MoveBoardWindow(item.Title, item.ProjectName, destinations) { Owner = this };
@@ -1543,8 +1529,12 @@ public partial class MainWindow : Window
     {
         var collapsed = _settings.SidebarCollapsed;
         SidebarPanel.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-        SidebarColumn.Width = collapsed ? new GridLength(0) : new GridLength(248);
-        SidebarGapColumn.Width = collapsed ? new GridLength(0) : new GridLength(1);
+        SidebarColumn.MinWidth = collapsed ? 0 : 220;
+        SidebarColumn.Width = collapsed ? new GridLength(0) : new GridLength(
+            WorkspacePresentation.SidebarWidth(_settings.SidebarWidth, WorkspaceGrid.ActualWidth > 0 ? WorkspaceGrid.ActualWidth : Width - 16));
+        SidebarLibraryText.MaxWidth = Math.Max(80, SidebarColumn.Width.Value - 80);
+        SidebarGapColumn.Width = new GridLength(collapsed ? 0 : 8);
+        SidebarSplitter.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
         SidebarToggleButton.ToolTip = collapsed ? L("MainExpandSidebarToolTip") : L("MainCollapseSidebarToolTip");
     }
 
@@ -1683,7 +1673,8 @@ public partial class MainWindow : Window
                     && item.File.FullName.Equals(captureTarget, StringComparison.OrdinalIgnoreCase),
                 Kind: SidebarDocumentKind.Board))
             .ToList();
-        foreach (var project in projectNames.Where(project => !projectCounts.ContainsKey(project)))
+        foreach (var project in projectNames.Where(project => !projectCounts.ContainsKey(project)
+            && !project.Equals(ProjectLibraryService.DefaultProjectName, StringComparison.OrdinalIgnoreCase)))
         {
             regularItems.Add(new SidebarDocument(
                 string.Empty,
@@ -1759,6 +1750,9 @@ public partial class MainWindow : Window
             .OrderBy(item => item.Kind == SidebarDocumentKind.ScreenshotHistory ? 1 : 0)
             .ThenByDescending(item => item.Title, StringComparer.CurrentCultureIgnoreCase)
             .ToList();
+        if (!screenshotItems.Any(item => item.Kind == SidebarDocumentKind.ScreenshotDaily))
+            screenshotItems.Insert(0, new SidebarDocument("", L("SidebarNoBoardPlaceholder"), "",
+                AppSettings.ScreenshotsDirectoryName, L("SidebarScreenshots"), 0, true, false, false, false, SidebarDocumentKind.ScreenshotDaily));
         regularItems = regularItems
             .OrderBy(item => item.ProjectName.Equals(ProjectLibraryService.DefaultProjectName, StringComparison.CurrentCultureIgnoreCase)
                 ? 0
@@ -1837,7 +1831,6 @@ public partial class MainWindow : Window
             menu.Items.Add(item);
         }
         Add("MainNewBoardButton", NewButton_Click);
-        Add("MainNewProjectButton", NewProjectButton_Click);
         menu.Items.Add(new System.Windows.Controls.Separator());
         Add("TextNewBoardHeading", NewTextBoardButton_Click);
         Add("TextNewFolder", NewTextFolderButton_Click);
@@ -1895,7 +1888,12 @@ public partial class MainWindow : Window
 
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.N)
+        if (_focusMode && e.Key == Key.Escape)
+        {
+            SetFocusMode(false);
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.N)
         {
             NewButton_Click(sender, e);
             e.Handled = true;
@@ -1912,6 +1910,7 @@ public partial class MainWindow : Window
         }
         else if (Keyboard.Modifiers == ModifierKeys.Control && e.Key == Key.F)
         {
+            if (_focusMode) SetFocusMode(false);
             if (UseTextReader) _textReader?.FocusSearch();
             else _ = ShowSearchAsync(allDocuments: false);
             e.Handled = true;
@@ -2124,6 +2123,7 @@ public partial class MainWindow : Window
         _defaultPixPinShortcut.Dispose();
         _canvasIdleTimer.Stop();
         _sidebarRefreshTimer.Stop();
+        _dateRolloverTimer.Stop();
         CanvasView?.Dispose();
         _ = _captureInbox.StopAsync();
         _ = _ocrQueue.StopAsync();
@@ -2358,18 +2358,28 @@ public partial class MainWindow : Window
         bool IsCaptureTarget,
         SidebarDocumentKind Kind)
     {
+        public DateOnly PresentationDate { get; init; } = DateOnly.FromDateTime(DateTime.Now);
+        private bool Chinese => LocalizationService.CurrentLanguage == LocalizationService.Chinese;
+        public DateOnly? DailyDate => Kind is SidebarDocumentKind.ScreenshotDaily or SidebarDocumentKind.TextClipsDaily
+            ? WorkspacePresentation.DailyDate(Path) : null;
+        public string DisplayTitle => Kind is SidebarDocumentKind.ScreenshotDaily or SidebarDocumentKind.TextClipsDaily
+            ? WorkspacePresentation.DailyTitle(Path, Title, PresentationDate, Chinese) : Title;
+        public string ModuleDisplayName => Kind is SidebarDocumentKind.ScreenshotDaily or SidebarDocumentKind.ScreenshotHistory
+            ? LocalizationService.T("SidebarScreenshots") : IsTextBoard ? LocalizationService.T("SidebarTextClips") : LocalizationService.T("SidebarProjects");
+        public string ModuleGlyph => IsTextBoard ? "\uE8A5" : Kind is SidebarDocumentKind.ScreenshotDaily or SidebarDocumentKind.ScreenshotHistory ? "\uE91B" : "\uE8B7";
+        public string ModuleColor => IsTextBoard ? "#168A7B" : Kind is SidebarDocumentKind.ScreenshotDaily or SidebarDocumentKind.ScreenshotHistory ? "#007AFF" : "#6E6E73";
+        public bool CanCreateInlineBoard => CanCreateBoard && Kind is SidebarDocumentKind.Board or SidebarDocumentKind.TextClipsManual;
+        public bool CanDeleteProject => Kind == SidebarDocumentKind.Board && !IsArchived
+            && ProjectName != ProjectLibraryService.OtherLocationProjectName;
         public string SectionDisplayName => Kind switch
         {
-            SidebarDocumentKind.ScreenshotDaily => DailySection(LocalizationService.T("SidebarScreenshots")),
-            SidebarDocumentKind.ScreenshotHistory => LocalizationService.T("SidebarScreenshotsHistory"),
-            SidebarDocumentKind.TextClipsMonthly or SidebarDocumentKind.TextClipsLegacy => LocalizationService.T("SidebarTextClipsHistory"),
-            SidebarDocumentKind.TextClipsDaily => DailySection(LocalizationService.T("SidebarTextClips")),
+            SidebarDocumentKind.ScreenshotDaily or SidebarDocumentKind.TextClipsDaily => WorkspacePresentation.MonthTitle(
+                DailyDate ?? PresentationDate, PresentationDate, Chinese),
+            SidebarDocumentKind.ScreenshotHistory or SidebarDocumentKind.TextClipsMonthly or SidebarDocumentKind.TextClipsLegacy
+                => Chinese ? "早期月度画板" : "Earlier monthly boards",
             SidebarDocumentKind.TextClipsManual => ProjectDisplayName,
-            _ => LocalizationService.T("SidebarProjects") + " · " + ProjectDisplayName
+            _ => ProjectDisplayName
         };
-        private string DailySection(string section) =>
-            Title.Length >= 10 && Title[..7] != DateTime.Now.ToString("yyyy-MM")
-                ? section + " · " + Title[..7] : section;
         public string Glyph => IsTextBoard ? "\uE8A5" : "\uEB9F";
         public bool IsTextBoard => Kind is SidebarDocumentKind.TextClipsDaily or SidebarDocumentKind.TextClipsMonthly
             or SidebarDocumentKind.TextClipsLegacy or SidebarDocumentKind.TextClipsManual;
@@ -2377,7 +2387,7 @@ public partial class MainWindow : Window
         public bool IsDefaultExpanded => !IsArchived && Kind is not SidebarDocumentKind.ScreenshotHistory
             and not SidebarDocumentKind.TextClipsMonthly and not SidebarDocumentKind.TextClipsLegacy
             && (Kind is not SidebarDocumentKind.ScreenshotDaily and not SidebarDocumentKind.TextClipsDaily
-                || IsPlaceholder || Title.StartsWith(DateTime.Now.ToString("yyyy-MM"), StringComparison.Ordinal));
+                || IsPlaceholder || DailyDate is { } date && date.Year == PresentationDate.Year && date.Month == PresentationDate.Month);
 
         public override string ToString() => Title;
     }

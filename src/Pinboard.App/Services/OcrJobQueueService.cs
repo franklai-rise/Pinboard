@@ -15,6 +15,7 @@ public sealed class OcrJobQueueService : IAsyncDisposable
     private readonly IOcrRecognizer _ocr;
     private readonly Func<string, PinboardDocument> _resolveDocument;
     private readonly SemaphoreSlim _queueGate = new(1, 1);
+    private readonly SemaphoreSlim _processingGate = new(1, 1);
     private readonly SemaphoreSlim _signal = new(0, 1);
     private CancellationTokenSource? _workerCancellation;
     private Task? _worker;
@@ -29,6 +30,13 @@ public sealed class OcrJobQueueService : IAsyncDisposable
 
     public string QueueDirectory { get; }
     public event EventHandler<OcrQueueFailure>? JobFailed;
+
+    public async Task RunWhilePausedAsync(Func<Task> operation)
+    {
+        await _processingGate.WaitAsync();
+        try { await operation(); }
+        finally { _processingGate.Release(); }
+    }
 
     public void Start()
     {
@@ -110,6 +118,7 @@ public sealed class OcrJobQueueService : IAsyncDisposable
         await StopAsync();
         _workerCancellation?.Dispose();
         _queueGate.Dispose();
+        _processingGate.Dispose();
         _signal.Dispose();
     }
 
@@ -141,7 +150,9 @@ public sealed class OcrJobQueueService : IAsyncDisposable
             }
             try
             {
-                await ProcessJobAsync(next, cancellationToken);
+                await _processingGate.WaitAsync(cancellationToken);
+                try { await ProcessJobAsync(next, cancellationToken); }
+                finally { _processingGate.Release(); }
                 await _queueGate.WaitAsync(cancellationToken);
                 try
                 {

@@ -311,3 +311,9 @@ body {
     animation: none;
   }
 }
+/* Focus is presentation-only. The scene and save error overlay stay intact. */
+.canvas-shell--focus .excalidraw .layer-ui__wrapper,
+.canvas-shell--focus .excalidraw .App-menu,
+.canvas-shell--focus .excalidraw .HintViewer {
+  display: none !important;
+}

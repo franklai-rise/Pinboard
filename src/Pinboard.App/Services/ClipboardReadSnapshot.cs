@@ -43,4 +43,34 @@ public static class ClipboardTextCapturePolicy
     public static string Truncate(string text) => text.Length <= MaximumTextLength
         ? text
         : text[..(MaximumTextLength - TruncatedMarker.Length)] + TruncatedMarker;
+
+    public static bool IsDrawingPayload(string text)
+    {
+        // Excalidraw puts its type and elements header before embedded image data.
+        // Inspect only a bounded prefix, never decode or parse megabytes of base64.
+        var prefix = text.AsSpan().TrimStart();
+        if (prefix.IsEmpty || prefix[0] != '{') return false;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(prefix[..Math.Min(prefix.Length, 16_384)].ToString());
+        var reader = new System.Text.Json.Utf8JsonReader(bytes, isFinalBlock: false, state: default);
+        var drawingType = false;
+        var elements = false;
+        try
+        {
+            while (reader.Read())
+            {
+                if (reader.CurrentDepth != 1 || reader.TokenType != System.Text.Json.JsonTokenType.PropertyName) continue;
+                var typeProperty = reader.ValueTextEquals("type");
+                var elementsProperty = reader.ValueTextEquals("elements");
+                if (!reader.Read()) return false;
+                if (typeProperty && reader.TokenType == System.Text.Json.JsonTokenType.String)
+                    drawingType = reader.ValueTextEquals("excalidraw/clipboard");
+                if (elementsProperty && reader.TokenType == System.Text.Json.JsonTokenType.StartArray) elements = true;
+                if (drawingType && elements) return true;
+                if (reader.TokenType is System.Text.Json.JsonTokenType.StartArray or System.Text.Json.JsonTokenType.StartObject)
+                    if (!reader.TrySkip()) return false;
+            }
+        }
+        catch (System.Text.Json.JsonException) { }
+        return false;
+    }
 }

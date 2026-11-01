@@ -37,6 +37,47 @@ public partial class TextReadingView : System.Windows.Controls.UserControl
     private TextReadingFavoritesStore? _favoritesStore;
     private string? _documentPath;
     private IReadOnlySet<string> _favoriteElementIds = new HashSet<string>(StringComparer.Ordinal);
+    private double _listRatio = WorkspacePresentation.DefaultReaderRatio;
+
+    public event EventHandler<double>? LayoutRatioChanged;
+
+    public void ConfigureLayout(double ratio)
+    {
+        _listRatio = WorkspacePresentation.ReaderRatio(ratio);
+        ApplyReadingLayout();
+    }
+
+    public void SetFocusMode(bool enabled)
+    {
+        var visibility = enabled ? Visibility.Collapsed : Visibility.Visible;
+        ReadingSearchBar.Visibility = ReadingOptions.Visibility = ReadingActions.Visibility = FavoriteButton.Visibility = visibility;
+    }
+
+    private void ReadingPanes_SizeChanged(object sender, SizeChangedEventArgs e) => ApplyReadingLayout();
+
+    private void ApplyReadingLayout()
+    {
+        if (ReadingPanes is null) return;
+        var width = Math.Max(500, ReadingPanes.ActualWidth - 10);
+        var ratio = Math.Clamp(_listRatio, 240 / width, 1 - 260 / width);
+        ReadingListColumn.Width = new GridLength(ratio, GridUnitType.Star);
+        ReadingDetailColumn.Width = new GridLength(1 - ratio, GridUnitType.Star);
+    }
+
+    private void ReadingSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+    {
+        var width = ReadingListColumn.ActualWidth + ReadingDetailColumn.ActualWidth;
+        if (width <= 0) return;
+        _listRatio = WorkspacePresentation.ReaderRatio(ReadingListColumn.ActualWidth / width);
+        LayoutRatioChanged?.Invoke(this, _listRatio);
+    }
+
+    private void ReadingSplitter_DoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        ConfigureLayout(WorkspacePresentation.DefaultReaderRatio);
+        LayoutRatioChanged?.Invoke(this, _listRatio);
+        e.Handled = true;
+    }
 
     public string? FavoritesError { get; private set; }
 

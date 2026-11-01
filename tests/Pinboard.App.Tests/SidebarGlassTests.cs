@@ -64,6 +64,24 @@ public class SidebarGlassTests
                 var glass = (Border)item.Template.FindName("Glass", item);
                 Assert.IsInstanceOfType<LinearGradientBrush>(glass.Background);
                 Assert.IsTrue(Descendants(root).OfType<UIElement>().All(e => e.Effect is null), "Sidebar must not allocate blur effects.");
+                var tooltip = new ToolTip { Content = "Long hover details 中文: " + new string('x', 120), Style = (Style)app.Resources[typeof(ToolTip)] };
+                tooltip.Measure(new Size(420, 400)); tooltip.Arrange(new Rect(0, 0, tooltip.DesiredSize.Width, tooltip.DesiredSize.Height)); tooltip.UpdateLayout();
+                var tooltipText = Descendants(tooltip).OfType<TextBlock>().Single();
+                Assert.AreEqual(((SolidColorBrush)tooltip.Foreground).Color, ((SolidColorBrush)tooltipText.Foreground).Color,
+                    "Global TextBlock styling must not override tooltip text contrast.");
+                Assert.AreEqual(TextWrapping.Wrap, tooltipText.TextWrapping);
+                Assert.IsTrue(tooltip.ActualWidth <= 420);
+                var reader = new TextReadingView { Width = 1000, Height = 700 };
+                reader.ConfigureLayout(.6);
+                reader.Measure(new Size(1000, 700)); reader.Arrange(new Rect(0, 0, 1000, 700)); reader.UpdateLayout();
+                var pane = (Grid)reader.FindName("ReadingPanes");
+                Assert.IsTrue(pane.ColumnDefinitions[0].ActualWidth > pane.ColumnDefinitions[2].ActualWidth);
+                Assert.AreEqual(Cursors.SizeWE, Descendants(reader).OfType<GridSplitter>().Single().Cursor);
+                reader.SetFocusMode(true);
+                Assert.AreEqual(Visibility.Collapsed, ((FrameworkElement)reader.FindName("ReadingSearchBar")).Visibility);
+                Assert.AreEqual(Visibility.Visible, ((FrameworkElement)reader.FindName("ClipsList")).Visibility);
+                reader.SetFocusMode(false);
+                Assert.AreEqual(Visibility.Visible, ((FrameworkElement)reader.FindName("ReadingSearchBar")).Visibility);
                 // Offscreen render: exercises template, animation and glyph resource creation without opening user documents.
                 var bitmap = new System.Windows.Media.Imaging.RenderTargetBitmap(360, 900, 144, 144, PixelFormats.Pbgra32);
                 bitmap.Render(root);

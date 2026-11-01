@@ -157,6 +157,36 @@ public sealed class OcrJobQueueTests
         Assert.AreEqual(TimeSpan.FromHours(1), OcrJobQueueService.GetRetryDelay(1000));
     }
 
+    [TestMethod]
+    public async Task LibraryOperation_WaitsForActiveOcrAndReleasesWorkerAfterFailure()
+    {
+        using var temp = new TemporaryDirectory();
+        var document = new PinboardDocument(Path.Combine(temp.Path, "protected.pinboard"));
+        var asset = CreateAsset(8);
+        await document.InsertCapturedImageAsync(asset, "test");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var finish = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var recognizer = new TestRecognizer(async (_, chinese, english, cancellation) =>
+        {
+            entered.TrySetResult();
+            await finish.Task.WaitAsync(cancellation);
+            return Results(chinese, english, "committed before library change");
+        });
+        await using var queue = new OcrJobQueueService(recognizer, path => new PinboardDocument(path), temp.QueuePath);
+        await queue.EnqueueAsync(document.FilePath, asset.Hash, [8, 1], 80, 80, false, true);
+        queue.Start();
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        var changed = false;
+        var change = queue.RunWhilePausedAsync(() => { changed = true; return Task.CompletedTask; });
+        Assert.IsFalse(changed, "Do not recycle a project while OCR has its database open.");
+        finish.SetResult();
+        await change.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.IsTrue(changed);
+        Assert.AreEqual(1, (await document.LoadOcrResultsAsync(asset.Hash)).Count);
+        await Assert.ThrowsExceptionAsync<IOException>(() => queue.RunWhilePausedAsync(() => throw new IOException("synthetic recycle failure")));
+        await queue.RunWhilePausedAsync(() => Task.CompletedTask).WaitAsync(TimeSpan.FromSeconds(5));
+    }
+
     private static IReadOnlyList<OcrTextResult> Results(bool chinese, bool english, string text)
     {
         var results = new List<OcrTextResult>();

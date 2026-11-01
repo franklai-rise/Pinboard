@@ -352,11 +352,45 @@
   </Style>
 
   <Style TargetType="ToolTip">
-    <Setter Property="Background" Value="#F21D1D1F" />
-    <Setter Property="Foreground" Value="White" />
-    <Setter Property="Padding" Value="9,6" />
-    <Setter Property="BorderThickness" Value="0" />
-    <Setter Property="FontSize" Value="11.5" />
+    <Setter Property="Background" Value="#FCFCFE" />
+    <Setter Property="Foreground" Value="{StaticResource LabelBrush}" />
+    <Setter Property="BorderBrush" Value="{StaticResource SeparatorBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="MaxWidth" Value="420" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="ContentTemplate"><Setter.Value><DataTemplate>
+      <TextBlock Text="{Binding}" TextWrapping="Wrap"
+                 Foreground="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToolTip}}"
+                 FontSize="{Binding FontSize, RelativeSource={RelativeSource AncestorType=ToolTip}}" />
+    </DataTemplate></Setter.Value></Setter>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToolTip">
+      <Border x:Name="TipSurface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+              BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+        <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}" />
+      </Border>
+    </ControlTemplate></Setter.Value></Setter>
+    <Style.Triggers><DataTrigger Binding="{Binding Source={x:Static SystemParameters.HighContrast}}" Value="True">
+      <Setter Property="Background" Value="{DynamicResource {x:Static SystemColors.InfoBrushKey}}" />
+      <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.InfoTextBrushKey}}" />
+    </DataTrigger></Style.Triggers>
+  </Style>
+
+  <Style x:Key="PaneSplitter" TargetType="GridSplitter">
+    <Setter Property="Background" Value="Transparent" /><Setter Property="Cursor" Value="SizeWE" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" /><Setter Property="VerticalAlignment" Value="Stretch" />
+    <Setter Property="ResizeDirection" Value="Columns" /><Setter Property="ResizeBehavior" Value="PreviousAndNext" />
+    <Setter Property="KeyboardIncrement" Value="12" /><Setter Property="Focusable" Value="True" />
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="GridSplitter">
+      <Border Background="{TemplateBinding Background}">
+        <Border x:Name="Grip" Width="1" HorizontalAlignment="Center" Background="{StaticResource SoftSeparatorBrush}" />
+      </Border>
+      <ControlTemplate.Triggers>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Grip" Property="Width" Value="3" /><Setter TargetName="Grip" Property="Background" Value="#90BFF2" /></Trigger>
+        <Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Grip" Property="Background" Value="{StaticResource AccentBrush}" /></Trigger>
+        <Trigger Property="IsDragging" Value="True"><Setter TargetName="Grip" Property="Width" Value="3" /><Setter TargetName="Grip" Property="Background" Value="{StaticResource AccentBrush}" /></Trigger>
+      </ControlTemplate.Triggers>
+    </ControlTemplate></Setter.Value></Setter>
   </Style>
 
   <Style TargetType="Expander">

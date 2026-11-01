@@ -92,6 +92,7 @@ internal static class Program
 
         await Window.HandleActivationAsync(["--open", picturePath]);
         await WaitReadyAsync();
+        await CheckCanvasFocusAsync(pictures);
         await CheckActiveImageDeltaAsync(settings, pictures);
         await Task.Delay(500);
         await ScreenshotAsync("screenshot-inbox");
@@ -161,6 +162,7 @@ internal static class Program
         await (Task)Call("ReleaseIdleCanvasAsync")!;
         Check(Field("CanvasView") is null, "Second sleep releases recreated renderer");
         await CheckAiSessionsAsync(settings, picturePath);
+        CheckProjectRecycling();
         File.WriteAllText(Path.Combine(Output, "passed.txt"), $"All {_passed} desktop smoke checks passed.\n" + DateTimeOffset.Now.ToString("O"));
         Console.WriteLine("Output: " + Output);
         // Cleanly release only this harness's window/listeners, never the installed app.
@@ -181,6 +183,34 @@ internal static class Program
         Check(list.Items.Count == 10, "Native reader lists copied content without timestamp-label duplicates");
         var readHash = SHA256.HashData(await File.ReadAllBytesAsync(document.FilePath));
         Check(originalHash.SequenceEqual(readHash), "Reading does not rewrite the source board");
+        Call("SetFocusMode", true);
+        Check(((FrameworkElement)reader.FindName("ReadingSearchBar")).Visibility == Visibility.Collapsed
+            && ((FrameworkElement)reader.FindName("ReadingActions")).Visibility == Visibility.Collapsed,
+            "Reader focus hides search and actions while retaining its panes");
+        Check(Field("CanvasView") is null, "Reader focus does not allocate WebView");
+        Call("SetFocusMode", false);
+        Check(((FrameworkElement)reader.FindName("ReadingSearchBar")).Visibility == Visibility.Visible,
+            "Reader focus exit restores controls");
+        settings.SidebarWidth = 330;
+        Call("ApplySidebarState");
+        Window.UpdateLayout();
+        Check(Math.Abs(((ColumnDefinition)Window.FindName("SidebarColumn")).ActualWidth - 330) < 1,
+            "Sidebar restores configured width");
+        settings.SidebarCollapsed = true; Call("ApplySidebarState");
+        settings.SidebarCollapsed = false; Call("ApplySidebarState"); Window.UpdateLayout();
+        Check(Math.Abs(((ColumnDefinition)Window.FindName("SidebarColumn")).ActualWidth - 330) < 1,
+            "Sidebar collapse and expand preserve its width");
+        settings.SidebarWidth = 272; Call("ApplySidebarState");
+        Call("RefreshSidebarDocuments");
+        var sidebarView = System.Windows.Data.CollectionViewSource.GetDefaultView(Field("_sidebarDocuments"));
+        Check(sidebarView.Groups?.Count == 3, "Sidebar separates screenshots, text and existing projects");
+        var todayTitle = DateTime.Now.ToString("yyyy-MM-dd");
+        var sidebarRows = ((System.Collections.IEnumerable)Field("_sidebarDocuments")!).Cast<object>().ToArray();
+        Check(sidebarRows.Any(row => row.GetType().GetProperty("DisplayTitle")!.GetValue(row)?.ToString() == "Today · " + todayTitle),
+            "Sidebar marks the actual daily board as Today");
+        var focusedReadHash = SHA256.HashData(await File.ReadAllBytesAsync(document.FilePath));
+        Check(originalHash.SequenceEqual(focusedReadHash),
+            "Focus and layout preferences do not rewrite board data");
         Check(reader.FocusElement(longClip.ElementId, "searchabletail"), "Reader focuses a late keyword in a long clip");
         await Task.Delay(300);
         var detail = (System.Windows.Controls.RichTextBox)reader.FindName("FullTextBox");
@@ -222,6 +252,73 @@ internal static class Program
         Check(before.GetProperty("viewport").GetRawText() == after.GetProperty("viewport").GetRawText(), "Background screenshot capture preserves reading position and zoom");
         Check(updates[0].GetProperty("revision").GetInt64() == (await document.LoadSnapshotAsync(includeFiles: false)).Revision,
             "Delta renderer acknowledges the committed database revision");
+    }
+
+    private static async Task CheckCanvasFocusAsync(PinboardDocument document)
+    {
+        var view = (WebView2)Field("CanvasView")!;
+        var before = await FlushAsync(document.FilePath);
+        var hash = SHA256.HashData(await File.ReadAllBytesAsync(document.FilePath));
+        Call("SetFocusMode", true);
+        await Task.Delay(250);
+        Check(await view.CoreWebView2.ExecuteScriptAsync("document.querySelector('.canvas-shell').classList.contains('canvas-shell--focus')") == "true",
+            "Canvas receives native focus state");
+        Check(await view.CoreWebView2.ExecuteScriptAsync("getComputedStyle(document.querySelector('.excalidraw .layer-ui__wrapper')).display==='none'") == "true",
+            "Canvas focus hides the editing tool layer");
+        await WaitUntilAsync(async () => await CountBlueCanvasPixelsAsync(view) > 300,
+            "Focus canvas did not finish decoding its demonstration images.");
+        Check(true, "Focus canvas renders actual image pixels rather than placeholder boxes");
+        var after = await FlushAsync(document.FilePath);
+        Check(before.GetProperty("viewport").GetRawText() == after.GetProperty("viewport").GetRawText(),
+            "Canvas focus preserves zoom and reading position");
+        var focusedHash = SHA256.HashData(await File.ReadAllBytesAsync(document.FilePath));
+        Check(hash.SequenceEqual(focusedHash),
+            "Entering focus leaves the scene file unchanged");
+        await ScreenshotAsync("focus-canvas");
+        await view.CoreWebView2.ExecuteScriptAsync("window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))");
+        await Task.Delay(200);
+        Check(Field("_focusMode") is false, "Escape restores both native and web focus state");
+        await FlushAsync(document.FilePath);
+        var restoredHash = SHA256.HashData(await File.ReadAllBytesAsync(document.FilePath));
+        Check(hash.SequenceEqual(restoredHash),
+            "Exiting focus also leaves scene data unchanged");
+    }
+
+    private static async Task<int> CountBlueCanvasPixelsAsync(WebView2 view)
+    {
+        await using var stream = new MemoryStream();
+        await view.CoreWebView2.CapturePreviewAsync(CoreWebView2CapturePreviewImageFormat.Png, stream);
+        using var bitmap = SkiaSharp.SKBitmap.Decode(stream.ToArray());
+        var count = 0;
+        for (var y = 0; y < bitmap.Height; y += 2)
+            for (var x = 0; x < bitmap.Width; x += 2)
+            {
+                var color = bitmap.GetPixel(x, y);
+                if (color.Blue > color.Red + 35 && color.Blue > color.Green + 10) count++;
+            }
+        return count;
+    }
+
+    private static void CheckProjectRecycling()
+    {
+        // Only fixtures created by this harness enter the real Windows Recycle Bin.
+        var root = Path.Combine(Output, "RecycleChecks");
+        var project = Directory.CreateDirectory(Path.Combine(root, "Disposable demo")).FullName;
+        File.WriteAllText(Path.Combine(project, "Demo.pinboard"), "synthetic fixture");
+        File.WriteAllText(Path.Combine(project, "readme.txt"), "synthetic fixture");
+        void RecycleFile(string path) => Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(path,
+            Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+        void RecycleFolder(string path) => Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(path,
+            Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+        ProjectDeletion.Execute(root, ProjectDeletion.Prepare(root, "Disposable demo"), RecycleFile, RecycleFolder);
+        Check(!Directory.Exists(project), "Real Windows recycling removes an isolated non-empty project folder");
+        var ordinary = Path.Combine(root, "Disposable note.pinboard");
+        var history = Path.Combine(root, "2026-09.pinboard");
+        File.WriteAllText(ordinary, "synthetic ordinary board");
+        File.WriteAllText(history, "synthetic historical board");
+        ProjectDeletion.Execute(root, ProjectDeletion.Prepare(root, ProjectLibraryService.DefaultProjectName), RecycleFile, RecycleFolder);
+        Check(!File.Exists(ordinary) && File.Exists(history) && Directory.Exists(root),
+            "Real default-project recycling preserves the root and historical automatic boards");
     }
 
     private static async Task CheckLongTextCanvasFocusAsync(PinboardDocument document, TextClipInsertResult clip)

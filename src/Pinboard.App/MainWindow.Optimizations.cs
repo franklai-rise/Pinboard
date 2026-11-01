@@ -14,6 +14,7 @@ public partial class MainWindow
     private CaptureInbox _captureInbox = null!;
     private OcrJobQueueService _ocrQueue = null!;
     private readonly HashSet<Task> _captureWrites = [];
+    private readonly SemaphoreSlim _captureRoutingGate = new(1, 1);
     private readonly HashSet<string> _canvasFileIds = new(StringComparer.Ordinal);
     private string? _canvasDocumentPath;
     private long _expectedCanvasRevision = -1;
@@ -56,10 +57,15 @@ public partial class MainWindow
     private async Task JournalCaptureAsync(byte[]? image, string? text, DateTimeOffset capturedAt, uint sequence)
     {
         // Resolve the date and receiving board before compression/OCR or any awaited work.
-        var target = image is not null ? _settings.ResolveCaptureTarget(capturedAt)
-            : _settings.ResolveTextCaptureTarget(capturedAt);
-        if (image is not null) await _captureInbox.EnqueueImageAsync(target, image, capturedAt, sequence);
-        else await _captureInbox.EnqueueTextAsync(target, text!, capturedAt, sequence);
+        await _captureRoutingGate.WaitAsync();
+        try
+        {
+            var target = image is not null ? _settings.ResolveCaptureTarget(capturedAt)
+                : _settings.ResolveTextCaptureTarget(capturedAt);
+            if (image is not null) await _captureInbox.EnqueueImageAsync(target, image, capturedAt, sequence);
+            else await _captureInbox.EnqueueTextAsync(target, text!, capturedAt, sequence);
+        }
+        finally { _captureRoutingGate.Release(); }
     }
 
     private async void TrackCaptureWrite(Task task)
@@ -179,6 +185,8 @@ public partial class MainWindow
                 _canvasFileIds.Clear();
             }
             _textReader ??= CreateTextReader();
+            _textReader.ConfigureLayout(_settings.TextReaderListRatio);
+            _textReader.SetFocusMode(_focusMode);
             var restoreState = _readerDocumentPath != document.FilePath;
             if (restoreState) _textReader.Clear();
             var snapshot = await Task.Run(() => document.LoadSnapshotAsync(includeFiles: false));
@@ -213,6 +221,12 @@ public partial class MainWindow
     private TextReadingView CreateTextReader()
     {
         var view = new TextReadingView();
+        view.ConfigureLayout(_settings.TextReaderListRatio);
+        view.LayoutRatioChanged += (_, ratio) =>
+        {
+            _settings.TextReaderListRatio = ratio;
+            SaveWorkspacePreferences();
+        };
         view.NavigateToElement += async (_, args) =>
         {
             var document = _activeDocument;
@@ -255,6 +269,7 @@ public partial class MainWindow
 
     private void UpdateTextViewToggle()
     {
+        UpdateFocusButton();
         if (_showAiSessions) { TextViewToggleButton.Visibility = Visibility.Collapsed; return; }
         var isText = _activeDocument is { } document && TextClipsLibrary.GetDocumentKind(_settings.LibraryPath, document.FilePath) != TextClipsDocumentKind.None;
         TextViewToggleButton.Visibility = isText ? Visibility.Visible : Visibility.Collapsed;
@@ -303,7 +318,7 @@ public partial class MainWindow
             _ => "project/"
         };
         var month = item.Kind is SidebarDocumentKind.ScreenshotDaily or SidebarDocumentKind.TextClipsDaily
-            && item.Title.Length >= 7 ? item.Title[..7] : item.ProjectName;
+            ? (item.DailyDate ?? DateOnly.FromDateTime(DateTime.Now)).ToString("yyyy-MM") : item.ProjectName;
         return prefix + month;
     }
 

@@ -38,7 +38,9 @@ public partial class NewBoardWindow : Window
         try
         {
             var projectText = ProjectBox.Text.Trim();
-            var projectName = _displayToProject.TryGetValue(projectText, out var internalName) ? internalName : projectText;
+            if (!_displayToProject.TryGetValue(projectText, out var projectName))
+                throw new InvalidOperationException(LocalizationService.CurrentLanguage == LocalizationService.Chinese
+                    ? "请选择已有项目。" : "Choose an existing project.");
             ResultPath = _projectLibrary.CreateBoardPath(BoardTitleBox.Text, projectName);
             DialogResult = true;
         }

@@ -40,6 +40,7 @@ type OpenPayload = {
   files: HostAsset[];
   revision: number;
   viewport?: CanvasViewport;
+  focusMode?: boolean;
 };
 
 type FlushWaiter = {
@@ -67,6 +68,7 @@ export default function App() {
   const [documentPath, setDocumentPath] = useState("");
   const [documentTitle, setDocumentTitle] = useState("");
   const [language, setLanguage] = useState<"en" | "zh-CN">("en");
+  const [focusMode, setFocusMode] = useState(false);
   const [loading, setLoading] = useState(false);
   const [hasContent, setHasContent] = useState(false);
   const [externalMutationBlocking, setExternalMutationBlocking] = useState(false);
@@ -134,6 +136,7 @@ export default function App() {
   }, []);
 
   const applyOpenDocument = useCallback((payload: OpenPayload, externalUpdate = false) => {
+    setFocusMode(payload.focusMode === true);
     const failDelta = (reason: string, missingFileIds?: string[]) => {
       postToHost("DocumentRenderFailed", { path: payload.path, revision: payload.revision, reason, missingFileIds }, payload.path);
       postToHost("RequestFullDocument", { path: payload.path, revision: payload.revision, reason, missingFileIds }, payload.path);
@@ -368,6 +371,7 @@ export default function App() {
       // Keep accepting host opens while a different board's canvas remounts.
       // The latest authoritative payload is applied as soon as its API is ready.
       return subscribeToHost((message) => {
+        if (message.type === "SetFocusMode") setFocusMode((message.payload as { enabled?: boolean })?.enabled === true);
         if (message.type === "OpenDocument") pendingCanvasOpen.current = message.payload as OpenPayload;
         if (message.type === "ExternalDocumentUpdated") {
           const payload = message.payload as OpenPayload;
@@ -381,6 +385,7 @@ export default function App() {
       });
     }
     const unsubscribe = subscribeToHost((message) => {
+      if (message.type === "SetFocusMode") setFocusMode((message.payload as { enabled?: boolean })?.enabled === true);
       if (message.type === "OpenDocument") openDocument(message.payload as OpenPayload);
       if (message.type === "ExternalDocumentUpdated") applyOpenDocument(message.payload as OpenPayload, true);
       if (message.type === "SaveAck") {
@@ -546,6 +551,19 @@ export default function App() {
     languageRef.current = language;
   }, [language]);
 
+  useEffect(() => {
+    if (!focusMode) return;
+    const exit = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setFocusMode(false);
+      postToHost("ExitFocusMode", {}, documentPath);
+    };
+    window.addEventListener("keydown", exit, true);
+    return () => window.removeEventListener("keydown", exit, true);
+  }, [focusMode, documentPath]);
+
   const initialData = useMemo(
     () => ({
       appState: {
@@ -570,7 +588,7 @@ export default function App() {
         : (language === "zh-CN" ? "保存失败" : "Save failed");
 
   return (
-    <main className="canvas-shell">
+    <main className={`canvas-shell${focusMode ? " canvas-shell--focus" : ""}`}>
       {loading && (
         <div className="loading">
           <div className="loading-card">
@@ -613,7 +631,8 @@ export default function App() {
         name={documentTitle || documentPath || "Pinboard"}
         detectScroll={false}
         handleKeyboardGlobally
-        viewModeEnabled={!documentPath}
+        viewModeEnabled={focusMode || !documentPath}
+        zenModeEnabled={focusMode}
         aiEnabled={false}
         onChange={(elements, appState, files) => {
           lastState.current = { elements, appState, files };
@@ -652,14 +671,14 @@ export default function App() {
           <span>{language === "zh-CN" ? "从侧栏打开画板，或复制内容开始收集。" : "Open a board from the sidebar, or copy something to collect it."}</span>
         </div>
       )}
-      <button className="bottom-button" type="button" onClick={focusBottom}
+      {!focusMode && <button className="bottom-button" type="button" onClick={focusBottom}
         disabled={!documentPath || !hasContent || loading || externalMutationBlocking}
         title={language === "zh-CN" ? "一键到底 · 保持当前缩放" : "Go to bottom · Keep current zoom"}
         aria-label={language === "zh-CN" ? "跳到画板最下方内容" : "Go to the lowest content on the board"}>
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 4v11m-4-4 4 4 4-4M5 20h14" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-      </button>
+      </button>}
     </main>
   );
 }
